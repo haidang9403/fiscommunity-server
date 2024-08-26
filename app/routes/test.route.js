@@ -1,9 +1,16 @@
 const express = require("express");
 
-const testRouth = express.Router();
+const testRoute = express.Router();
 
-testRouth.get("/test", (req, res) => {
-    res.send("<h1>Test route</h1>");
+testRoute.get("/test", async (req, res, next) => {
+    try {
+        const allUsers = await global.prisma.user.findMany()
+        console.dir(allUsers, { depth: null })
+        res.send("Test successfull!");
+    } catch (err) {
+        console.error(err);
+        next(err);
+    }
 })
 
-module.exports = testRouth;
+module.exports = testRoute;
