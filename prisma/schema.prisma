@@ -14,7 +14,251 @@ datasource db {
 }
 
 model User {
-  id    Int     @id @default(autoincrement())
-  email String  @unique
-  name  String?
+  id           Int    @id @default(autoincrement())
+  email        String @unique
+  password     String
+  phone        String
+  totalStorage BigInt @default(0)
+  limitStorage BigInt @default(50000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  userProfileId Int         @unique
+  userProfile   UserProfile @relation(fields: [userProfileId], references: [id])
+
+  files   File[]
+  folders Folder[]
+
+  groups Group[] @relation("UserGroups")
+
+  ownerGroups Group[]
+
+  posts Post[]
+
+  likePosts  Post[] @relation("PostLikes")
+  sharePosts Post[] @relation("PostShares")
+
+  comments     Comment[]
+  commentLikes Comment[] @relation("CommentLikes")
+
+  sendRelations   UserRelation[] @relation("UserRelationSend")
+  reciveRelations UserRelation[] @relation("UserRelationRecive")
+
+  conversations Conversation[] @relation("UserConversation")
+
+  messages     Message[]
+  seenMessages Message[] @relation("SeenMessage")
+
+  notifications Notify[]
+}
+
+model UserRelation {
+  state Int @default(0) // 0 is unfriend, 1 is friend and follow, 2 is friend, 3 is follow, 4 is block
+
+  // relation 
+  userSendId Int
+  userSend   User @relation("UserRelationSend", fields: [userSendId], references: [id])
+
+  userReciveId Int
+  userRecive   User @relation("UserRelationRecive", fields: [userReciveId], references: [id])
+
+  @@id([userSendId, userReciveId])
+}
+
+model UserProfile {
+  id       Int      @id @default(autoincrement())
+  fullname String
+  address  String?
+  birthday DateTime
+  bio      String?
+  avatar   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  user User?
+}
+
+model Media {
+  id   Int     @id @default(autoincrement())
+  url  String
+  note String?
+  type Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  postId Int
+  post   Post @relation(fields: [postId], references: [id])
+}
+
+model Post {
+  id      Int     @id @default(autoincrement())
+  content String
+  like    Int     @default(0)
+  share   Int     @default(0)
+  ofGroup Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  ownerId Int
+  owner   User @relation(fields: [ownerId], references: [id])
+
+  media Media[]
+
+  files   File[]   @relation("PostFiles")
+  folders Folder[] @relation("PostFolders")
+
+  comments Comment[]
+
+  userLikes User[] @relation("PostLikes")
+  userShare User[] @relation("PostShares")
+}
+
+model Comment {
+  id      Int     @id @default(autoincrement())
+  content String
+  url     String?
+  like    Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  //relation
+  postId Int
+  post   Post @relation(fields: [postId], references: [id])
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  replyId Int?
+  reply   Comment? @relation("ReplyComment", fields: [replyId], references: [id])
+
+  replies Comment[] @relation("ReplyComment")
+
+  userLikes User[] @relation("CommentLikes")
+}
+
+model File {
+  id      Int     @id @default(autoincrement())
+  title   String
+  url     String
+  size    BigInt
+  ofGroup Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  ownerId Int
+  owner   User @relation(fields: [ownerId], references: [id])
+
+  groupId Int?
+  group   Group? @relation(fields: [groupId], references: [id])
+
+  folderId Int?
+  folder   Folder? @relation(fields: [folderId], references: [id])
+
+  posts Post[] @relation("PostFiles")
+}
+
+model Folder {
+  id      Int     @id @default(autoincrement())
+  title   String
+  url     String
+  size    BigInt
+  ofGroup Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  ownerId Int
+  owner   User @relation(fields: [ownerId], references: [id])
+
+  groupId Int?
+  group   Group? @relation(fields: [groupId], references: [id])
+
+  files File[]
+
+  parentFolderId  Int?
+  parentFolder    Folder?  @relation("ParentFolder", fields: [parentFolderId], references: [id])
+  childrenFolders Folder[] @relation("ParentFolder")
+
+  posts Post[] @relation("PostFolders")
+}
+
+model Group {
+  id           Int     @id @default(autoincrement())
+  groupName    String
+  bio          String?
+  totalStorage BigInt  @default(0)
+  limitStorage BigInt  @default(50000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  ownerId Int
+  owner   User @relation(fields: [ownerId], references: [id])
+
+  users User[] @relation("UserGroups")
+
+  files   File[]
+  folders Folder[]
+}
+
+model Conversation {
+  id            Int      @id @default(autoincrement())
+  name          String
+  isGroup       Boolean  @default(false)
+  lastMessageAt DateTime @default(now())
+  totalStorage  BigInt   @default(0)
+  limitStorage  BigInt   @default(50000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  user User[] @relation("UserConversation")
+
+  messages Message[]
+}
+
+model Message {
+  id   Int     @id @default(autoincrement())
+  body String?
+  url  String?
+  size BigInt  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  conversationId Int
+  conversation   Conversation @relation(fields: [conversationId], references: [id])
+
+  senderId Int
+  sender   User @relation(fields: [senderId], references: [id])
+
+  seens User[] @relation("SeenMessage")
+}
+
+model Notify {
+  id        Int      @id @default(autoincrement())
+  content   String
+  image     String
+  link      String
+  type      Int
+  createdAt DateTime @default(now())
+
+  // relation
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
 }
