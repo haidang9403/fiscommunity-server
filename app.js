@@ -1,14 +1,17 @@
+/* eslint-disable no-unused-vars */
 const express = require("express");
 const cors = require("cors");
 const createError = require('http-errors');
+const cookieParser = require("cookie-parser");
 
 // Import route
 const mainRouter = require("./app/routes/");
 
 const app = express();
 
-
+// Middleware
 app.use(cors());
+app.use(cookieParser());
 app.use(express.json());
 
 // Routes

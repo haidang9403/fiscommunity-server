@@ -17,9 +17,10 @@ model User {
   id           Int    @id @default(autoincrement())
   email        String @unique
   password     String
-  phone        String
-  totalStorage BigInt @default(0)
-  limitStorage BigInt @default(50000)
+  phone        String?
+  totalStorage Int @default(0)
+  limitStorage Int @default(50000)
+  refreshToken String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -74,6 +75,7 @@ model UserProfile {
   birthday DateTime
   bio      String?
   avatar   String?
+  gender   Int
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
