@@ -53,6 +53,21 @@ module.exports = {
             next()
         })
     },
+    // VERIFY ACCESSTOKEN AND OWN
+    verifyAccessTokenAndOwn: (req, res, next) => {
+        const userId = req.params.userId;
+        if (!req.headers['authorization']) return next(createError(401, "Unauthorized"));
+        const token = req.headers['authorization'].split(" ")[1]
+        JWT.verify(token, config.jwt.access_key, (err, payload) => {
+            if (err) return next(createError(401, err.message));
+            if (userId == payload.aud) {
+                req.payload = payload;
+                next()
+            } else {
+                next(createError(405));
+            }
+        })
+    },
     // VERIFY REFRESHTOKEN
     verifyRefreshToken: (req, res, next) => {
         const token = req.cookies.refreshToken;

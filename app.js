@@ -6,6 +6,7 @@ const cookieParser = require("cookie-parser");
 
 // Import route
 const mainRouter = require("./app/routes/");
+const { errorValidate, errorValidateAll } = require("./app/utils/validation.util");
 
 const app = express();
 
@@ -24,9 +25,14 @@ app.use((req, res, next) => {
 
 // Define error-handling middleware last
 app.use((err, req, res, next) => {
-    return res.status(err.statusCode || 500).json({
-        message: err.message || "Internal Server Error",
-    })
+    if (err.name == "ValidationError") {
+        if (err.one) return errorValidate(res, err);
+        else if (err.all) return errorValidateAll(res, err);
+    } else {
+        return res.status(err.statusCode || 500).json({
+            message: err.message || "Internal Server Error",
+        })
+    }
 })
 
 module.exports = app;

@@ -13,6 +13,19 @@ const getInfoUser = (user) => {
     }
 }
 
+const getRequestProfileUser = (req) => {
+    const allowdFields = ["fullname", "address", "birthday", "bio", "gender"];
+    const profile = {};
+
+    allowdFields.forEach((field) => {
+        if (req.body[field]) {
+            profile[field] = req.body[field];
+        }
+    })
+
+    return profile;
+}
+
 const signToken = async (userId, res) => {
     const accessToken = await JWT.signAccessToken(userId);
     const refreshToken = await JWT.signRefreshToken(userId);
@@ -44,5 +57,6 @@ const signToken = async (userId, res) => {
 
 module.exports = {
     getInfoUser,
-    signToken
+    signToken,
+    getRequestProfileUser
 }

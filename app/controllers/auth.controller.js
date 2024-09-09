@@ -1,5 +1,5 @@
 const createError = require("http-errors");
-const { authSchema, errorValidate, errorValidateAll } = require("../utils/validation.util");
+const { authSchema } = require("../utils/validation.util");
 const prisma = require("../services/prisma");
 const bcrypt = require("bcrypt");
 const JWT = require("../utils/jwt.util");
@@ -22,12 +22,12 @@ const authController = {
             })
 
             if (!existUser) {
-                throw createError(404, { username: "Tài khoản không tồn tại trên hệ thống" })
+                return res.status(404).json({ email: "Tài khoản không tồn tại" });
             }
 
             const isValidPassword = await bcrypt.compare(loginUser.password, existUser.password);
             if (!isValidPassword) {
-                throw createError(400, { password: "Mật khẩu không chính xác" })
+                return res.status(400).json({ password: "Mật khẩu không chính xác" });
             }
 
             const { accessToken } = await signToken(existUser.id, res);
@@ -37,19 +37,14 @@ const authController = {
             // LOGIN SUCCESSFULL
             res.status(200).send({ ...infoUser, accessToken });
         } catch (e) {
-            console.error(e);
-
-            if (e.name == "ValidationError") {
-                return errorValidate(res, e);
-            }
-
+            e.one = true;
             return next(e);
         }
     },
     // ---------------- REGISTER ----------------- //
     register: async (req, res, next) => {
         try {
-            const registerUser = await authSchema.register.validate(req.body);
+            const registerUser = await authSchema.register.validate(req.body, { abortEarly: false });
 
             // FIND USER IN DATABASE
             const existUser = await prisma.user.findUnique({
@@ -91,12 +86,7 @@ const authController = {
             // SIGN UP SUCCESSFULL!
             return res.send({ ...infoUser, accessToken });
         } catch (e) {
-            console.error(e);
-
-            if (e.name == "ValidationError") {
-                return errorValidateAll(res, e);
-            }
-
+            e.all = true;
             return next(e);
         }
     },
@@ -117,7 +107,7 @@ const authController = {
     // LOGOUT
     logout: async (req, res) => {
         res.clearCookie("refreshToken");
-        res.send({ message: "Logout successfully!" })
+        res.send({ success: true, message: "Đăng xuất thành công" })
     },
 }
 
