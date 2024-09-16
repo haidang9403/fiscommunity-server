@@ -18,8 +18,8 @@ model User {
   email        String @unique
   password     String
   phone        String?
-  totalStorage Int @default(0)
-  limitStorage Int @default(50000)
+  totalStorage BigInt @default(0)
+  limitStorage BigInt @default(50000)
   refreshToken String?
 
   createdAt DateTime @default(now())

@@ -7,8 +7,8 @@ const getInfoUser = (user) => {
         id: user.id,
         email: user.email,
         phone: user.phone,
-        totalStorage: user.totalStorage,
-        limitStorage: user.limitStorage,
+        totalStorage: user.totalStorage.toString(),
+        limitStorage: user.limitStorage.toString(),
         userProfile: user.userProfile,
     }
 }

@@ -10,6 +10,12 @@ const config = {
         access_key: process.env.JWT_ACCESS_KEY,
         // eslint-disable-next-line no-undef
         refresh_key: process.env.JWT_REFRESH_KEY
+    },
+    google: {
+        // eslint-disable-next-line no-undef
+        credential: process.env.GOOGLE_APPLICATION_CREDENTIALS,
+        // eslint-disable-next-line no-undef
+        base_url_upload: process.env.BASE_URL_UPLOAD,
     }
 }
 

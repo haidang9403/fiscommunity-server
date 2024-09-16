@@ -15,7 +15,7 @@ module.exports = {
 
             const secret = config.jwt.access_key;
             const options = {
-                expiresIn: '15m'
+                expiresIn: '1y'
             }
 
             JWT.sign(payload, secret, options, (err, token) => {
