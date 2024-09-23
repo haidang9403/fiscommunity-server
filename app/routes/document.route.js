@@ -1,7 +1,7 @@
 const express = require('express');
 const { verifyAccessToken } = require("../utils/jwt.util");
 const { uploadMiddleware } = require('../utils/googleCloundStorage/upload.util');
-const { uploadFile, uploadFolder, deleteFile, deleteFolder } = require('../controllers/document.controller');
+const { uploadFile, uploadFolder, deleteFile, deleteFolder, getStructureDocument, getFile, getFolder } = require('../controllers/document.controller');
 
 const documentRoute = express.Router();
 
@@ -17,5 +17,12 @@ documentRoute.delete("/document/folder/:folderId", verifyAccessToken, deleteFold
 documentRoute.put("/document/:userId/:documentId", (req, res) => {
     res.send("Update document")
 });
+
+//--------- API Get document -----------//
+documentRoute.get("/document", verifyAccessToken, getStructureDocument)
+
+documentRoute.get("/document/file/:fileId", verifyAccessToken, getFile)
+
+documentRoute.get("/document/folder/:folderId", getFolder)
 
 module.exports = documentRoute;

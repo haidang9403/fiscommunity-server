@@ -1,7 +1,11 @@
-const prisma = require("../services/prisma");
+const prisma = require("../../services/prisma");
 const Folder = require("./folder.model");
 
 class File {
+    static get model() {
+        return prisma.file
+    }
+
     constructor({ id = null, title, url, size, ofGroup = false, ownerId, groupId = null, folderId = null }) {
         this.id = id;
         this.title = title;
@@ -167,6 +171,14 @@ class File {
                 })
             }
         }
+    }
+
+    static async getAll({ where, orderBy, select }) {
+        return await prisma.file.findMany({
+            where,
+            orderBy,
+            select,
+        })
     }
 }
 

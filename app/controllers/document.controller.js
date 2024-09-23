@@ -2,9 +2,15 @@ const createError = require("http-errors");
 const { uploadFileToGCS, uploadFolderToGCS } = require("../utils/googleCloundStorage/upload.util");
 const prisma = require("../services/prisma");
 // const { updateSizeParentFolder } = require("../utils/helper.util");
-const Folder = require("../models/folder.model");
-const File = require("../models/file.model");
+const Folder = require("../models/document/folder.model");
+const File = require("../models/document/file.model");
 const { deleteFileFromGCS, deleteFolderFromGCS } = require("../utils/googleCloundStorage/delete.util");
+const { getFileFromGCS, getFolderFromGCS } = require("../utils/googleCloundStorage/get.util");
+const bucket = require("../services/googleCloudStorage");
+const archiver = require("archiver")
+const { PassThrough } = require('stream')
+const path = require('path');
+
 
 module.exports = {
     // UPLOAD FILE
@@ -258,6 +264,145 @@ module.exports = {
             })
         } catch (e) {
             next(e)
+        }
+    },
+    // GET STRUCETURE DOCUMENT
+    getStructureDocument: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const folderId = req.query.folder;
+            const folders = await Folder.getAll({
+                where: {
+                    ownerId: userId,
+                    parentFolderId: parseInt(folderId) ?? null,
+                },
+                orderBy: {
+                    title: "asc"
+                }
+            })
+
+            const folderStructure = folders.map(folder => {
+                return {
+                    type: "folder",
+                    data: {
+                        ...folder,
+                        size: folder.size.toString()
+                    },
+                }
+            })
+
+            const files = await File.getAll({
+                where: {
+                    ownerId: userId,
+                    folderId: parseInt(folderId) ?? null,
+                }
+            })
+
+            const fileStructure = files.map(file => {
+                return {
+                    type: "file",
+                    data: {
+                        ...file,
+                        size: file.size.toString()
+                    }
+                }
+            })
+
+            res.status(200).json([
+                ...folderStructure,
+                ...fileStructure
+            ])
+        } catch (e) {
+            next(e)
+        }
+    },
+    // GET FILE
+    getFile: async (req, res, next) => {
+        try {
+            const fileId = req.params.fileId;
+            const userId = parseInt(req.payload.aud);
+            if (!fileId) throw createError(400, "No file to delete");
+
+            const file = await File.get(fileId);
+            if (!file) throw createError(400, "File not exist")
+
+            if (file.ownerId !== userId) {
+                throw createError(403, "You do not have permission to delete this file");
+            }
+
+            const pathFileArray = file.url.split("/");
+            pathFileArray.shift();
+            const pathFile = pathFileArray.join("/");
+
+            getFileFromGCS(pathFile, async (error, result) => {
+                if (error) return next(createError(500, "Error when get file"));
+
+                console.log(result)
+
+                return res.status(200).json({
+                    ...file,
+                    size: file.size.toString(),
+                    downloadUrl: result.url
+                })
+            })
+        } catch (e) {
+            next(e)
+        }
+    },
+    // GET FOLDER
+    getFolder: async (req, res, next) => {
+        try {
+            const folderId = req.params.folderId;
+            // const userId = req.payload.aud;
+
+            if (!folderId) throw createError(400, "No folder to delete");
+
+            const folder = await Folder.get(folderId);
+            if (!folder) throw createError(400, "Folder not exist")
+
+            // if (folder.ownerId !== userId) {
+            //     throw createError(403, "You do not have permission to upload this folder");
+            // }
+
+            const pathFolderArray = folder.url.split("/");
+            pathFolderArray.shift();
+            const pathFolder = pathFolderArray.join("/");
+
+            getFolderFromGCS(pathFolder, (error, result) => {
+                if (error) {
+                    res.status(500).send('Error creating zip file');
+                    return;
+                }
+
+                if (result.message) {
+                    res.status(404).send(result.message);
+                    return;
+                }
+
+                // Tạo archive ZIP
+                const archive = archiver('zip', { zlib: { level: 9 } });
+                const stream = new PassThrough();
+
+                const nameFolderZip = folder.title + Date.now() + ".zip";
+                res.attachment(nameFolderZip);
+
+                // Thêm các file vào archive
+                result.fileList.forEach((file) => {
+                    const fileStream = bucket.file(file).createReadStream();
+
+                    const fileName = path.relative(pathFolder, file);
+                    const folderName = folder.title + "/" + fileName;
+                    archive.append(fileStream, { name: folderName });
+                });
+
+                archive.pipe(stream);
+                archive.finalize();
+
+
+                stream.pipe(res);
+            });
+        } catch (e) {
+            next(e);
         }
     }
 }

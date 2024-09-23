@@ -1,6 +1,9 @@
-const prisma = require("../services/prisma");
+const prisma = require("../../services/prisma");
 
 class Folder {
+    static get model() {
+        return prisma.folder
+    }
 
     constructor({ id = null, title, url, size, ofGroup, ownerId, groupId = null, parentFolderId = null }) {
         this.id = id;
@@ -199,6 +202,14 @@ class Folder {
                 }
             })
         }
+    }
+
+    static async getAll({ where, orderBy, select }) {
+        return await prisma.folder.findMany({
+            where,
+            orderBy,
+            select,
+        })
     }
 }
 
