@@ -167,6 +167,9 @@ class Folder {
             const folderDeleted = await prisma.folder.delete({
                 where: {
                     id: parseInt(id)
+                },
+                include: {
+                    files: true
                 }
             })
 

@@ -27,7 +27,7 @@ model User {
 
   // relation
   userProfileId Int         @unique
-  userProfile   UserProfile @relation(fields: [userProfileId], references: [id])
+  userProfile   UserProfile @relation(fields: [userProfileId], references: [id], onDelete: Cascade)
 
   files   File[]
   folders Folder[]
@@ -63,15 +63,15 @@ model UserRelation {
   friendRequestStatus  FriendRequestStatus @default(NONE)
   // relation 
   userSendId Int
-  userSend   User @relation("UserRelationSend", fields: [userSendId], references: [id])
+  userSend   User @relation("UserRelationSend", fields: [userSendId], references: [id], onDelete: Cascade)
 
   userReciveId Int
-  userRecive   User @relation("UserRelationRecive", fields: [userReciveId], references: [id])
+  userRecive   User @relation("UserRelationRecive", fields: [userReciveId], references: [id], onDelete: Cascade)
 
   @@id([userSendId, userReciveId])
 }
 
-enum FriendRequestStatus{
+enum FriendRequestStatus {
   NONE
   PENDING
   ACCEPTED
@@ -97,15 +97,20 @@ model UserProfile {
 model Media {
   id   Int     @id @default(autoincrement())
   url  String
-  note String?
-  type Int
+  caption String?
+  type TypeMedia @default(IMAGE)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // relation
   postId Int
-  post   Post @relation(fields: [postId], references: [id])
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+enum TypeMedia {
+  IMAGE
+  VIDEO
 }
 
 model Post {
@@ -113,14 +118,17 @@ model Post {
   content String
   like    Int     @default(0)
   share   Int     @default(0)
+  comment Int     @default(0)
   ofGroup Boolean @default(false)
+  privacy TypePrivacy @default(PUBLIC)
+  type TypePost @default(POST)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // relation
   ownerId Int
-  owner   User @relation(fields: [ownerId], references: [id])
+  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   media Media[]
 
@@ -131,6 +139,22 @@ model Post {
 
   userLikes User[] @relation("PostLikes")
   userShare User[] @relation("PostShares")
+
+  postShareId Int?      
+  postShare   Post?     @relation("SharedPost", fields: [postShareId], references: [id]) // Bài được chia sẻ
+
+  sharedPosts Post[]    @relation("SharedPost")
+}
+
+enum TypePost {
+  POST
+  SHARE
+}
+
+enum TypePrivacy {
+  PUBLIC
+  FRIENDS
+  PRIVATE
 }
 
 model Comment {
@@ -144,13 +168,13 @@ model Comment {
 
   //relation
   postId Int
-  post   Post @relation(fields: [postId], references: [id])
+  post   Post @relation(fields: [postId], references: [id], onDelete: Cascade)
 
   userId Int
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   replyId Int?
-  reply   Comment? @relation("ReplyComment", fields: [replyId], references: [id])
+  reply   Comment? @relation("ReplyComment", fields: [replyId], references: [id], onDelete: Cascade)
 
   replies Comment[] @relation("ReplyComment")
 
@@ -169,13 +193,13 @@ model File {
 
   // relation
   ownerId Int
-  owner   User @relation(fields: [ownerId], references: [id])
+  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   groupId Int?
-  group   Group? @relation(fields: [groupId], references: [id])
+  group   Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   folderId Int?
-  folder   Folder? @relation(fields: [folderId], references: [id])
+  folder   Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
   posts Post[] @relation("PostFiles")
 }
@@ -192,15 +216,15 @@ model Folder {
 
   // relation
   ownerId Int
-  owner   User @relation(fields: [ownerId], references: [id])
+  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   groupId Int?
-  group   Group? @relation(fields: [groupId], references: [id])
+  group   Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
 
   files File[]
 
   parentFolderId  Int?
-  parentFolder    Folder?  @relation("ParentFolder", fields: [parentFolderId], references: [id])
+  parentFolder    Folder?  @relation("ParentFolder", fields: [parentFolderId], references: [id], onDelete: Cascade)
   childrenFolders Folder[] @relation("ParentFolder")
 
   posts Post[] @relation("PostFolders")
@@ -218,7 +242,7 @@ model Group {
 
   // relation
   ownerId Int
-  owner   User @relation(fields: [ownerId], references: [id])
+  owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   users User[] @relation("UserGroups")
 
@@ -254,10 +278,10 @@ model Message {
 
   // relation
   conversationId Int
-  conversation   Conversation @relation(fields: [conversationId], references: [id])
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   senderId Int
-  sender   User @relation(fields: [senderId], references: [id])
+  sender   User @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   seens User[] @relation("SeenMessage")
 }
@@ -272,5 +296,5 @@ model Notify {
 
   // relation
   userId Int
-  user   User @relation(fields: [userId], references: [id])
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

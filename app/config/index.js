@@ -16,6 +16,14 @@ const config = {
         credential: process.env.GOOGLE_APPLICATION_CREDENTIALS,
         // eslint-disable-next-line no-undef
         base_url_upload: process.env.BASE_URL_UPLOAD,
+    },
+    cloudinary: {
+        // eslint-disable-next-line no-undef
+        name: process.env.CLOUND_NAME,
+        // eslint-disable-next-line no-undef
+        api_key: process.env.CLOUND_API_KEY,
+        // eslint-disable-next-line no-undef
+        api_secret: process.env.CLOUND_API_SECRET
     }
 }
 

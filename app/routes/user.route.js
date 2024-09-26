@@ -5,20 +5,23 @@ const { verifyAccessTokenAndOwn, verifyAccessToken } = require("../utils/jwt.uti
 const userRoute = express.Router();
 
 //-------- API Get User --------- //
-// --- Get one user
+
+//--- Get one user
 userRoute.get("/user/:userId", verifyAccessTokenAndOwn, userController.getUser);
 
-// --- Get all user
+//--- Get all user
 // userRoute.get("/user", userController.getAllUser);
 
 //-------- API User Profile -------- //
-// --- Update Profile
+
+//--- Update Profile
 userRoute.put("/user/profile/:userId", verifyAccessTokenAndOwn, userController.updateProfile);
 
-// Change password
+//--- Change password
 userRoute.put("/user/password/:userId", verifyAccessTokenAndOwn, userController.changePassword);
 
 //-------- API User Relation ----------//
+
 //--- Adding friend
 userRoute.post("/user/addfriend/:reciveId", verifyAccessToken, userController.addFriend);
 
@@ -31,12 +34,14 @@ userRoute.post("/user/denyfriend/:senderId", verifyAccessToken, userController.d
 //--- Unfriend
 userRoute.post("/user/unfriend/:reciveId", verifyAccessToken, userController.unfriend)
 
-userRoute.post("/user/follow/:reciveId", verifyAccessToken, userController.followUser)
-
-userRoute.post("/user/block/:reciveId", verifyAccessToken, userController.blockUser)
-
+//--- Remove Addfriend
 userRoute.post("/user/removeinvite/:reciveId", verifyAccessToken, userController.removeInvite)
 
+//--- Follow
+userRoute.post("/user/follow/:reciveId", verifyAccessToken, userController.followUser)
+
+//--- Block
+userRoute.post("/user/block/:reciveId", verifyAccessToken, userController.blockUser)
 
 userRoute.get("/user/friend", verifyAccessToken, (req, res) => {
     res.send("Get all friend")
