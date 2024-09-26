@@ -184,6 +184,48 @@ const postController = {
             console.log(e)
             next(createError(500, "Error when comment post"))
         }
+    },
+    //------- REPLY COMMENT --------//
+    replyComment: async (req, res, next) => {
+        try {
+            const { postId, commentId } = req.params;
+            const userId = req.payload.aud;
+            const { content, url } = req.body;
+
+            const comment = new Comment({
+                content,
+                url,
+                postId,
+                userId,
+                replyId: parseInt(commentId)
+            })
+
+            const commentSaved = await comment.save();
+
+            await Post.comment({ postId });
+
+            res.send(commentSaved)
+        } catch (e) {
+            console.log(e)
+            next(createError(500, "Error when reply comment"))
+        }
+    },
+    //------- LIKE COMMENT --------//
+    likeComment: async (req, res, next) => {
+        try {
+            const { commentId } = req.params
+            const userId = req.payload.aud
+
+            const commentLiked = await Comment.like({
+                commentId: parseInt(commentId),
+                userId: parseInt(userId)
+            })
+
+            res.status(200).json(commentLiked)
+        } catch (e) {
+            console.log(e)
+            next(createError(500, "Error when like comment"))
+        }
     }
 }
 

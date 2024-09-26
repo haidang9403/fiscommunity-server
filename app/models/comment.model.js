@@ -80,6 +80,55 @@ class Comment {
 
         return post;
     }
+
+    static async like({ commentId, userId }) {
+        const comment = await prisma.comment.findFirst({
+            where: {
+                id: parseInt(commentId),
+            },
+            include: {
+                userLikes: true
+            }
+        })
+
+        if (comment) {
+            const userLiked = comment.userLikes.some(user => parseInt(userId) == user.id)
+
+            if (userLiked) {
+                return await prisma.comment.update({
+                    where: {
+                        id: parseInt(commentId),
+                    },
+                    data: {
+                        like: {
+                            decrement: 1
+                        },
+                        userLikes: {
+                            disconnect: {
+                                id: parseInt(userId)
+                            }
+                        }
+                    }
+                })
+            } else {
+                return await prisma.comment.update({
+                    where: {
+                        id: parseInt(commentId),
+                    },
+                    data: {
+                        like: {
+                            increment: 1
+                        },
+                        userLikes: {
+                            connect: {
+                                id: parseInt(userId)
+                            }
+                        }
+                    }
+                })
+            }
+        } else return null;
+    }
 }
 
 module.exports = Comment;
