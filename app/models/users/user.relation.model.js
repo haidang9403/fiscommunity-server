@@ -1,3 +1,4 @@
+const { FriendRequestStatus } = require("@prisma/client");
 const prisma = require("../../services/prisma");
 
 class UserRelation {
@@ -146,9 +147,19 @@ class UserRelation {
     static async isPedding(userSendId, userReciveId) {
         return await prisma.userRelation.findFirst({
             where: {
-                userSendId: parseInt(userSendId),
-                userReciveId: parseInt(userReciveId),
-                friendRequestStatus: "PENDING"
+                OR: [
+                    {
+                        userSendId: parseInt(userSendId),
+                        userReciveId: parseInt(userReciveId),
+                        friendRequestStatus: FriendRequestStatus.PENDING
+                    },
+                    {
+                        userSendId: parseInt(userReciveId),
+                        userReciveId: parseInt(userSendId),
+                        friendRequestStatus: FriendRequestStatus.PENDING
+                    }
+                ]
+
             }
         });
     }

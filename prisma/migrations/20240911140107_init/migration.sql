@@ -1,3 +1,0 @@
--- AlterTable
-ALTER TABLE "User" ALTER COLUMN "limitStorage" SET DATA TYPE BIGINT,
-ALTER COLUMN "totalStorage" SET DATA TYPE BIGINT;

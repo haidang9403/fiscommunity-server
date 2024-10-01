@@ -19,7 +19,7 @@ model User {
   password     String
   phone        String?
   totalStorage BigInt @default(0)
-  limitStorage BigInt @default(50000)
+  limitStorage BigInt @default(5000)
   refreshToken String?
 
   createdAt DateTime @default(now())
@@ -32,7 +32,7 @@ model User {
   files   File[]
   folders Folder[]
 
-  groups Group[] @relation("UserGroups")
+  groups UserAttendGroup[] @relation("UserGroup")
 
   ownerGroups Group[]
 
@@ -52,7 +52,9 @@ model User {
   messages     Message[]
   seenMessages Message[] @relation("SeenMessage")
 
-  notifications Notify[]
+  notifications Notify[] @relation("ReciveNotify")
+
+  sendNotifications Notify[] @relation("SendNotify")
 }
 
 model UserRelation {
@@ -113,15 +115,21 @@ enum TypeMedia {
   VIDEO
 }
 
+enum UploadPostWhere {
+  USER
+  GROUP
+}
+
 model Post {
-  id      Int     @id @default(autoincrement())
-  content String
-  like    Int     @default(0)
-  share   Int     @default(0)
-  comment Int     @default(0)
-  ofGroup Boolean @default(false)
-  privacy TypePrivacy @default(PUBLIC)
-  type TypePost @default(POST)
+  id            Int               @id @default(autoincrement())
+  content       String
+  like          Int               @default(0)
+  share         Int               @default(0)
+  comment       Int               @default(0)
+  privacy       TypePrivacy       @default(PUBLIC)
+  type          TypePost          @default(POST)
+  isApproved    Boolean           @default(true)
+  from          UploadPostWhere   @default(USER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -129,6 +137,10 @@ model Post {
   // relation
   ownerId Int
   owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  groupId Int?
+  group   Group? @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
 
   media Media[]
 
@@ -144,6 +156,8 @@ model Post {
   postShare   Post?     @relation("SharedPost", fields: [postShareId], references: [id]) // Bài được chia sẻ
 
   sharedPosts Post[]    @relation("SharedPost")
+
+  messages Message[]
 }
 
 enum TypePost {
@@ -181,12 +195,18 @@ model Comment {
   userLikes User[] @relation("CommentLikes")
 }
 
+enum UploadDocumentWhere {
+  USER
+  GROUP
+  MESSAGE
+}
+
 model File {
   id      Int     @id @default(autoincrement())
   title   String
   url     String
   size    BigInt
-  ofGroup Boolean @default(false)
+  from    UploadDocumentWhere @default(USER)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -202,6 +222,8 @@ model File {
   folder   Folder? @relation(fields: [folderId], references: [id], onDelete: Cascade)
 
   posts Post[] @relation("PostFiles")
+
+  messages Message[]
 }
 
 model Folder {
@@ -209,7 +231,8 @@ model Folder {
   title   String
   url     String
   size    BigInt
-  ofGroup Boolean @default(false)
+  from    UploadDocumentWhere @default(USER)
+
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -228,14 +251,20 @@ model Folder {
   childrenFolders Folder[] @relation("ParentFolder")
 
   posts Post[] @relation("PostFolders")
+
+  messages Message[]
 }
 
 model Group {
   id           Int     @id @default(autoincrement())
   groupName    String
   bio          String?
+  avatar       String?
   totalStorage BigInt  @default(0)
-  limitStorage BigInt  @default(50000)
+  limitStorage BigInt  @default(5000)
+
+  type TypeGroup @default(PRIVATE)
+  approvalRequired Boolean @default(false) 
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -244,10 +273,49 @@ model Group {
   ownerId Int
   owner   User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
-  users User[] @relation("UserGroups")
+  users UserAttendGroup[] @relation("UserGroup")
 
   files   File[]
   folders Folder[]
+
+  sendNotifications Notify[] @relation("GroupSendNotify")
+
+  posts Post[]
+}
+
+enum TypeGroup {
+  PUBLIC
+  PRIVATE
+}
+
+enum GroupPermission {
+  NONE
+  READER // chỉ xem
+  MEMBER // đăng bài, tải tài nguyên
+  ADMIN // toàn quyền
+}
+
+model UserAttendGroup {
+  groupId Int
+  group Group @relation("UserGroup",fields: [groupId], references: [id])
+
+  userId Int
+  user User @relation("UserGroup", fields: [userId], references: [id])
+
+  state       StateAttendGroup  @default(NONE)
+  permission  GroupPermission   @default(NONE)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@id([groupId, userId])
+}
+
+enum StateAttendGroup {
+  NONE
+  PENDING
+  ACCEPTED
+  DELETED
 }
 
 model Conversation {
@@ -256,7 +324,7 @@ model Conversation {
   isGroup       Boolean  @default(false)
   lastMessageAt DateTime @default(now())
   totalStorage  BigInt   @default(0)
-  limitStorage  BigInt   @default(50000)
+  limitStorage  BigInt   @default(5000)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -271,7 +339,10 @@ model Message {
   id   Int     @id @default(autoincrement())
   body String?
   url  String?
-  size BigInt  @default(0)
+
+  type TypeMessage @default(TEXT)
+
+  deleted Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -284,17 +355,53 @@ model Message {
   sender   User @relation(fields: [senderId], references: [id], onDelete: Cascade)
 
   seens User[] @relation("SeenMessage")
+
+  fileId         Int?
+  file           File?          @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  folderId       Int?
+  folder         Folder?        @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  postId         Int?
+  post           Post?          @relation(fields: [postId], references: [id], onDelete: Cascade)
+}
+
+enum TypeMessage {
+  TEXT
+  MEDIA
+  FILE
+  FOLDER
+  POST
+  URL
+  EMAIL
+  PHONE
 }
 
 model Notify {
   id        Int      @id @default(autoincrement())
   message   String
   link      String
-  type      String
+  type      TypeNotify
   read      Boolean @default(false)
   createdAt DateTime @default(now())
 
   // relation
   userId Int
-  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User @relation("ReciveNotify",fields: [userId], references: [id], onDelete: Cascade)
+
+  userSendId Int
+  userSend User @relation("SendNotify",fields: [userSendId], references: [id], onDelete: Cascade)
+
+  groupSendId Int?
+  groupSend Group? @relation("GroupSendNotify", fields: [groupSendId], references: [id], onDelete: Cascade)
+}
+
+enum TypeNotify {
+  ADD_FRIEND
+  ACCEPT_FRIEND
+  LIKE_POST
+  COMMENT_POST
+  REPLY_COMMENT
+  LIKE_COMMENT
+  SHARE_POST
 }

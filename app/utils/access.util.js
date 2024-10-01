@@ -31,7 +31,9 @@ const accessPost = async (req, res, next) => {
                     return next(createError(403, "Not permission to access post"))
                 }
             case TypePrivacy.PRIVATE:
-                return next(createError(403, "Not permission to access post"))
+                if (post.ownerId != userId)
+                    return next(createError(403, "Not permission to access post"))
+                else next()
         }
     } catch (e) {
         console.log(e);
@@ -80,6 +82,10 @@ const accessComment = async (req, res, next) => {
         console.log(e);
         next(createError(500, "Error when access comment"))
     }
+}
+
+const accessGroup = async (req, res, next) => {
+
 }
 
 module.exports = {

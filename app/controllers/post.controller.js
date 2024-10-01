@@ -3,33 +3,40 @@ const Post = require("../models/post.model");
 const Media = require("../models/media.model");
 const prisma = require("../services/prisma");
 const { deleteMediaFromCloudinary } = require("../utils/cloudinary/delete.util");
-const { TypePost } = require("@prisma/client");
+const { TypePost, UploadPostWhere } = require("@prisma/client");
 const Comment = require("../models/comment.model");
 
 const postController = {
     //------- CREATE POST --------//
     createPost: async (req, res, next) => {
         try {
-            const { content, captions = [], files, folders } = req.body;
+            const { content, captions = [], files, folders, groupId, privacy } = req.body;
             const ownerId = parseInt(req.payload.aud);
+
+            const from = groupId ? UploadPostWhere.GROUP : UploadPostWhere.USER;
 
             // Tạo bài đăng
             const post = new Post({
                 content,
                 ownerId,
                 files,
-                folders
+                folders,
+                privacy,
+                from,
+                groupId
             });
 
             const postSaved = await post.save();
 
             const medias = req.files
+
             for (const [index, media] of medias.entries()) {
+                const caption = medias.length > 1 ? captions[index] : captions;
                 const newMedia = new Media({
                     url: media.path,
                     postId: postSaved.id,
                     type: Media.getTypeMedia(media),
-                    caption: captions[index]
+                    caption
                 })
 
                 await newMedia.save();
@@ -53,30 +60,76 @@ const postController = {
     //------- UPDATE POST --------//
     updatePost: async (req, res, next) => {
         try {
-            const { content, privacy, captions = {} } = req.body;
+            const { content = null, privacy = null, captions = [], files = [], folders = [] } = req.body;
             const { postId } = req.params;
             const userId = req.payload.aud;
 
-            const ids = Object.keys(captions)
-            for (const id of ids) {
-                const media = new Media({
-                    id: parseInt(id),
-                    caption: captions[id]
-                })
-
-                await media.save();
-            }
-
             const post = new Post({
                 id: parseInt(postId),
-                content: content,
+                content,
                 ownerId: parseInt(userId),
                 privacy,
+                files,
+                folders
             })
 
             const postUpdated = await post.save();
 
-            res.status(200).json(postUpdated);
+            // const ids = Object.keys(captions)
+            // for (const id of ids) {
+            //     const media = new Media({
+            //         id: parseInt(id),
+            //         caption: captions[id]
+            //     })
+
+            //     await media.save();
+            // }
+
+            const mediaOlds = await Media.model.findMany({
+                where: {
+                    postId: parseInt(postId)
+                }
+            })
+
+            let result;
+            for (const media of mediaOlds) {
+                result = await deleteMediaFromCloudinary(media);
+            }
+
+            if (result !== 'ok') {
+                return next(createError(500, "Error when delete media"))
+            }
+
+            const deletedOldMedia = await Post.deleteAllMedia(postId);
+
+            if (!deletedOldMedia) {
+                return next(createError(500, "Error when delete media"))
+            }
+
+            const medias = req.files
+
+            for (const [index, media] of medias.entries()) {
+                const caption = medias.length > 1 ? captions[index] : captions;
+                const newMedia = new Media({
+                    url: media.path,
+                    postId: postUpdated.id,
+                    type: Media.getTypeMedia(media),
+                    caption
+                })
+
+                await newMedia.save();
+            }
+
+            const postUpdatedSuccessfull = await prisma.post.findUnique({
+                where: {
+                    id: postUpdated.id
+                },
+                include: {
+                    media: true,
+                }
+            })
+
+            res.status(200).json(postUpdatedSuccessfull);
         } catch (e) {
             console.log(e);
             next(createError(500, "Error when update post"))

@@ -11,7 +11,8 @@ class User {
         password,
         phone = null,
         totalStorage,
-        limitStorage
+        limitStorage,
+        userProfileId
     }) {
         this.id = id;
         this.email = email;
@@ -19,6 +20,7 @@ class User {
         this.phone = phone;
         this.totalStorage = totalStorage;
         this.limitStorage = limitStorage;
+        this.userProfileId = parseInt(userProfileId);
     }
 
     static async isValidUser(id) {

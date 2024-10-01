@@ -16,5 +16,4 @@ authRoute.post("/logout", verifyRefreshToken, authController.logout);
 // ----------- API Refresh Token ---------- //
 authRoute.post("/refresh", verifyRefreshToken, authController.refreshToken)
 
-
 module.exports = authRoute;

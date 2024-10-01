@@ -10,6 +10,7 @@ const bucket = require("../services/googleCloudStorage");
 const archiver = require("archiver")
 const { PassThrough } = require('stream')
 const path = require('path');
+const { UploadDocumentWhere } = require("@prisma/client");
 
 
 module.exports = {
@@ -19,7 +20,7 @@ module.exports = {
             const userId = req.payload.aud;
             const file = req.file;
             const replace = req.body.replace ?? false;
-            const ofGroup = req.body.ofGroup ?? false;
+            const from = req.body.from ?? UploadDocumentWhere.USER;
             const groupId = req.body.groupId;
             const folderId = parseInt(req.body.folderId);
             if (!file) {
@@ -51,7 +52,7 @@ module.exports = {
                     title: result.fileName,
                     url: result.url,
                     size: BigInt(result.size),
-                    ofGroup,
+                    from,
                     ownerId: parseInt(userId),
                     groupId,
                     folderId
@@ -78,7 +79,7 @@ module.exports = {
             const files = req.files;
             const replace = req.body.replace ?? false;
             const parentFolderId = parseInt(req.body.parentFolderId);
-            const ofGroup = req.body.ofGroup;
+            const from = req.body.from;
             const groupId = req.body.groupId;
             if (!files) {
                 throw createError(400, "No file uploaded.");
@@ -112,7 +113,7 @@ module.exports = {
                     size: BigInt(folder.size),
                     ownerId: userId,
                     parentFolderId,
-                    ofGroup,
+                    from,
                     groupId
                 });
 
@@ -136,7 +137,7 @@ module.exports = {
                                     title: result.fileName,
                                     url: result.url,
                                     size: BigInt(result.size),
-                                    ofGroup,
+                                    from,
                                     ownerId: userId,
                                     groupId,
                                     folderId: replaceFolder.id
@@ -155,7 +156,7 @@ module.exports = {
                                     title: result.fileName,
                                     url: result.url,
                                     size: BigInt(result.size),
-                                    ofGroup,
+                                    from,
                                     ownerId: userId,
                                     groupId,
                                     folderId: newFolder.id
@@ -173,7 +174,7 @@ module.exports = {
                                 title: result.fileName,
                                 url: result.url,
                                 size: BigInt(result.size),
-                                ofGroup,
+                                from,
                                 ownerId: userId,
                                 groupId,
                                 folderId: newFolder.id

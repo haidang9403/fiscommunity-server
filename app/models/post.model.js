@@ -1,5 +1,7 @@
 const prisma = require("../services/prisma");
-const { TypePrivacy, TypePost } = require("../enums")
+const { TypePrivacy, TypePost } = require("../enums");
+const { UploadPostWhere } = require("@prisma/client");
+const Media = require("./media.model");
 
 class Post {
     static get model() {
@@ -12,25 +14,29 @@ class Post {
         like = 0,
         share = 0,
         comment = 0,
-        ofGroup = false,
-        type,
+        type = TypePost.POST,
         privacy = TypePrivacy.PUBLIC,
+        isApproved = true,
+        from = UploadPostWhere.USER,
         ownerId,
+        groupId,
         files = [],
         folders = [],
         userLikes = [],
         userShare = [],
         postShareId,
     }) {
-        this.id = id;
+        this.id = id ? parseInt(id) : null;
         this.content = content;
         this.like = parseInt(like);
         this.share = parseInt(share);
         this.comment = parseInt(comment);
-        this.ofGroup = ofGroup;
         this.type = type ?? TypePost.POST;
-        this.privacy = privacy ?? TypePrivacy.PUBLIC;
+        this.privacy = privacy;
+        this.isApproved = isApproved;
+        this.from = from;
         this.ownerId = parseInt(ownerId);
+        this.groupId = groupId ? parseInt(groupId) : null;
         this.files = files;
         this.folders = folders;
         this.userLikes = userLikes;
@@ -42,14 +48,35 @@ class Post {
         let post;
         if (this.id) {
             // Cập nhật bài viết đã có
+            const postExist = await prisma.post.findUnique({
+                where: {
+                    id: this.id
+                }
+            });
+
+            const dataUpdated = {
+                privacy: postExist.privacy,
+                files: {
+                    connect: this.files.map(fileId => ({ id: parseInt(fileId) }))
+                },
+                folders: {
+                    connect: this.folders.map(folderId => ({ id: parseInt(folderId) }))
+                }
+            }
+
+            if (this.content) {
+                dataUpdated.content = this.content
+            }
+
+            if (this.privacy) {
+                dataUpdated.privacy = this.privacy
+            }
+
             post = await prisma.post.update({
                 where: {
                     id: parseInt(this.id)
                 },
-                data: {
-                    content: this.content,
-                    privacy: this.privacy
-                },
+                data: dataUpdated,
                 include: {
                     media: true,
                     files: true,
@@ -64,9 +91,9 @@ class Post {
                 like: this.like,
                 share: this.share,
                 comment: this.comment,
-                ofGroup: this.ofGroup,
                 type: this.type,
-                privacy: this.privacy,
+                isApproved: this.isApproved,
+                from: this.from,
                 owner: {
                     connect: {
                         id: this.ownerId
@@ -89,10 +116,23 @@ class Post {
                 };
             }
 
+            if (this.privacy) {
+                postData.privacy = this.privacy
+            }
+
+            if (this.groupId) {
+                postData.groupId = {
+                    connect: {
+                        id: this.groupId
+                    }
+                }
+            }
+
             post = await prisma.post.create({
                 data: postData,
                 include: {
                     media: true,
+                    group: true,
                     files: true,
                     folders: true,
                     postShare: true,
@@ -111,6 +151,15 @@ class Post {
             include: {
                 media: true,
                 comments: true,
+            }
+        })
+    }
+
+    static async deleteAllMedia(id) {
+        const postId = parseInt(id);
+        return await Media.model.deleteMany({
+            where: {
+                postId,
             }
         })
     }

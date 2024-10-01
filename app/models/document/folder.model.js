@@ -1,3 +1,4 @@
+const { UploadDocumentWhere } = require("@prisma/client");
 const prisma = require("../../services/prisma");
 
 class Folder {
@@ -5,12 +6,21 @@ class Folder {
         return prisma.folder
     }
 
-    constructor({ id = null, title, url, size, ofGroup, ownerId, groupId = null, parentFolderId = null }) {
+    constructor({
+        id = null,
+        title,
+        url,
+        size,
+        from,
+        ownerId,
+        groupId = null,
+        parentFolderId = null
+    }) {
         this.id = id;
         this.title = title;
         this.url = url;
         this.size = size;
-        this.ofGroup = ofGroup;
+        this.from = from ?? UploadDocumentWhere.USER;
         this.ownerId = ownerId;
         this.groupId = groupId;
         this.parentFolderId = parentFolderId;
@@ -21,7 +31,7 @@ class Folder {
             title: this.title,
             url: this.url,
             size: this.size,
-            ofGroup: this.ofGroup,
+            from: this.from,
             ownerId: this.ownerId,
             groupId: this.groupId,
             parentFolderId: this.parentFolderId

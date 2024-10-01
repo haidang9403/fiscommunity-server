@@ -5,6 +5,7 @@ const authRoute = require("./auth.route");
 const userRoute = require("./user.route");
 const documentRoute = require("./document.route");
 const postRoute = require("./post.route");
+const groupRoute = require("./group.route");
 
 const mainRoute = express.Router();
 
@@ -13,7 +14,8 @@ mainRoute.use(
     authRoute,
     documentRoute,
     userRoute,
-    postRoute
+    postRoute,
+    groupRoute
 );
 
 module.exports = mainRoute;

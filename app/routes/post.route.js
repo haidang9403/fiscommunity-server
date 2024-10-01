@@ -15,7 +15,7 @@ postRoute.post("/post", verifyAccessToken, uploadMediaToCloudinary.array("media"
 postRoute.delete("/post/:postId", verifyAccessToken, accessOwnPost, postController.deletePost)
 
 //--- Update post
-postRoute.put("/post/:postId", verifyAccessToken, accessOwnPost, postController.updatePost)
+postRoute.put("/post/:postId", verifyAccessToken, accessOwnPost, uploadMediaToCloudinary.array("media", 10), postController.updatePost)
 
 //--- Like post
 postRoute.post("/post/:postId/like", verifyAccessToken, accessPost, postController.likePost)

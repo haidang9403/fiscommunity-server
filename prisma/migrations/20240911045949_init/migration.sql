@@ -1,5 +1,0 @@
--- AlterTable
-ALTER TABLE "File" ALTER COLUMN "size" SET DATA TYPE BIGINT;
-
--- AlterTable
-ALTER TABLE "Folder" ALTER COLUMN "size" SET DATA TYPE BIGINT;

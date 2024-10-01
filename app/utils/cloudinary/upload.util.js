@@ -16,6 +16,8 @@ const storage = new CloudinaryStorage({
     },
 });
 
+
+
 const fileFilter = (req, file, cb) => {
     if (file.mimetype.startsWith('image/') || file.mimetype.startsWith('video/')) {
         cb(null, true); // Chấp nhận file
@@ -32,6 +34,31 @@ const uploadMediaToCloudinary = multer({
     }
 })
 
+const storageImage = new CloudinaryStorage({
+    cloudinary: cloudinary,
+    params: {
+        folder: "images",
+        resource_type: "image",
+    }
+});
+
+const imageFilter = (req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) {
+        cb(null, true); // Chấp nhận file
+    } else {
+        cb(createError(400, 'Only images is allowed!'), false); // Từ chối file không hợp lệ
+    }
+};
+
+const uploadImageToCloudinary = multer({
+    storage: storageImage,
+    fileFilter: imageFilter,
+    limits: {
+        fileSize: 50 * 1024 * 1024,
+    }
+})
+
 module.exports = {
     uploadMediaToCloudinary,
+    uploadImageToCloudinary
 }

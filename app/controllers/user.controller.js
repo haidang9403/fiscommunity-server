@@ -5,6 +5,8 @@ const { getInfoUser, getRequestProfileUser } = require("../utils/helper.util");
 const { userSchema } = require("../utils/validation.util");
 const UserRelation = require("../models/users/user.relation.model");
 const User = require("../models/users/user.model");
+const Notify = require("../models/notify.model");
+const { TypeNotify } = require("@prisma/client");
 
 module.exports = {
     //--------- GET USER ----------//
@@ -124,8 +126,25 @@ module.exports = {
                 throw createError(400, "Add friend failed")
             }
 
-            // socket to reciveUser
+            const userSend = await User.model.findUnique({
+                where: {
+                    id: parseInt(userSendId)
+                },
+                include: {
+                    userProfile: true
+                }
+            })
 
+            // socket to reciveUser
+            // const notify = new Notify({
+            //     userId: userReciveId,
+            //     message: `${userSend.userProfile.fullname} đã gửi lời mời kết bạn`,
+            //     type: TypeNotify.ADD_FRIEND
+            // })
+
+            const io = req.app.get("socketio")
+
+            // io.to(`user_${userReciveId}`).emit('newNotification', notify)
 
             res.status(200).json(relationSaved);
         } catch (e) {

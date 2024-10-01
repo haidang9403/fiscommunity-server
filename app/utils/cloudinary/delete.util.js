@@ -7,6 +7,14 @@ const deleteMediaFromCloudinary = async (media) => {
     return result;
 }
 
+const deleteImageFromCloudinary = async (url) => {
+    const public_id = url.split('/').slice(-2).join('/').replace(/\.[^/.]+$/, '');
+    const { result } = await cloudinary.uploader.destroy(public_id, "image");
+
+    return result;
+}
+
 module.exports = {
-    deleteMediaFromCloudinary
+    deleteMediaFromCloudinary,
+    deleteImageFromCloudinary
 }

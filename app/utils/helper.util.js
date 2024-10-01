@@ -55,8 +55,16 @@ const signToken = async (userId, res) => {
     }
 }
 
+// Utility to remove null or undefined fields from data
+function cleanData(data) {
+    return Object.fromEntries(
+        Object.entries(data).filter(([_, v]) => v != null)
+    );
+}
+
 module.exports = {
     getInfoUser,
     signToken,
-    getRequestProfileUser
+    getRequestProfileUser,
+    cleanData
 }
