@@ -55,6 +55,16 @@ class Group {
         }
     }
 
+    static async isOwner({ groupId, userId }) {
+        const { ownerId } = await prisma.group.findUnique({
+            where: {
+                id: parseInt(groupId)
+            }
+        })
+
+        return ownerId == userId
+    }
+
     // Utility to remove null or undefined fields from data
     _cleanData(data) {
         return Object.fromEntries(

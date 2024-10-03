@@ -70,7 +70,7 @@ const uploadFileToGCS = async (fileBuffer, fileName, destFolder, options = { rep
         });
 
         blobStream.on('finish', async () => {
-            await blob.makePrivate();
+            // await blob.makePrivate();
             // Lấy thông tin về file
             const [metadata] = await blob.getMetadata();
             const fileSizeKBytes = parseInt(Math.ceil((metadata.size / 1024)));
@@ -116,7 +116,7 @@ const uploadFolderToGCS = async (files, destFolder, options = { replace: false }
 
             callback(null, { results: [], folder, errors });
         } catch (err) {
-            callback(err, null);
+            callback(err, {});
         }
 
         return; // Kết thúc nếu không có file nào để upload

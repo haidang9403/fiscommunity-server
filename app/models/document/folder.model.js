@@ -12,6 +12,7 @@ class Folder {
         url,
         size,
         from,
+        privacy,
         ownerId,
         groupId = null,
         parentFolderId = null
@@ -20,9 +21,10 @@ class Folder {
         this.title = title;
         this.url = url;
         this.size = size;
+        this.privacy = privacy;
         this.from = from ?? UploadDocumentWhere.USER;
         this.ownerId = ownerId;
-        this.groupId = groupId;
+        this.groupId = groupId ? parseInt(groupId) : null;
         this.parentFolderId = parentFolderId;
     }
 
@@ -32,6 +34,7 @@ class Folder {
             url: this.url,
             size: this.size,
             from: this.from,
+            privacy: this.privacy,
             ownerId: this.ownerId,
             groupId: this.groupId,
             parentFolderId: this.parentFolderId

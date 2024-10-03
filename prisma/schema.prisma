@@ -169,6 +169,7 @@ enum TypePrivacy {
   PUBLIC
   FRIENDS
   PRIVATE
+  PRIVATE_GROUP
 }
 
 model Comment {
@@ -207,6 +208,7 @@ model File {
   url     String
   size    BigInt
   from    UploadDocumentWhere @default(USER)
+  privacy TypePrivacy @default(PUBLIC)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -232,6 +234,7 @@ model Folder {
   url     String
   size    BigInt
   from    UploadDocumentWhere @default(USER)
+  privacy TypePrivacy @default(PUBLIC)
 
 
   createdAt DateTime @default(now())
@@ -297,10 +300,10 @@ enum GroupPermission {
 
 model UserAttendGroup {
   groupId Int
-  group Group @relation("UserGroup",fields: [groupId], references: [id])
+  group Group @relation("UserGroup",fields: [groupId], references: [id], onDelete: Cascade)
 
   userId Int
-  user User @relation("UserGroup", fields: [userId], references: [id])
+  user User @relation("UserGroup", fields: [userId], references: [id], onDelete: Cascade)
 
   state       StateAttendGroup  @default(NONE)
   permission  GroupPermission   @default(NONE)

@@ -1,7 +1,9 @@
+const { StateAttendGroup } = require("@prisma/client")
 const prisma = require("../../services/prisma")
 const { cleanData } = require("../../utils/helper.util")
 
 class UserAttendGroup {
+
     static model() {
         return prisma.userAttendGroup
     }
@@ -24,11 +26,20 @@ class UserAttendGroup {
             permission: this.permission
         };
 
-        if (this.id) {
+        const isExist = await prisma.userAttendGroup.findFirst({
+            where: {
+                groupId: this.groupId,
+                userId: this.userId
+            }
+        })
+
+        if (isExist) {
             return await prisma.userAttendGroup.update({
                 where: {
-                    groupId: this.groupId,
-                    userId: this.userId
+                    groupId_userId: {
+                        groupId: this.groupId,
+                        userId: this.userId
+                    }
                 },
                 data: cleanData(data)
             })
@@ -49,6 +60,16 @@ class UserAttendGroup {
                 }
             });
         }
+    }
+
+    static async isPendding({ groupId, userId }) {
+        return prisma.userAttendGroup.findFirst({
+            where: {
+                groupId: parseInt(groupId),
+                userId: parseInt(userId),
+                state: StateAttendGroup.PENDING
+            }
+        })
     }
 }
 

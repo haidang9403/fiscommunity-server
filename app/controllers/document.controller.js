@@ -10,7 +10,9 @@ const bucket = require("../services/googleCloudStorage");
 const archiver = require("archiver")
 const { PassThrough } = require('stream')
 const path = require('path');
-const { UploadDocumentWhere } = require("@prisma/client");
+const { UploadDocumentWhere, TypeGroup, TypePrivacy, GroupPermission } = require("@prisma/client");
+const Group = require("../models/groups/group.model");
+const UserAttendGroup = require("../models/groups/user.attend.group.model");
 
 
 module.exports = {
@@ -20,22 +22,49 @@ module.exports = {
             const userId = req.payload.aud;
             const file = req.file;
             const replace = req.body.replace ?? false;
-            const from = req.body.from ?? UploadDocumentWhere.USER;
-            const groupId = req.body.groupId;
+            let from = req.body.from ?? UploadDocumentWhere.USER;
+            const groupId = req.params.groupId;
             const folderId = parseInt(req.body.folderId);
+            let privacy = req.body.privacy;
             if (!file) {
                 throw createError(400, "No file uploaded.");
             }
 
+            // Check valid folder
             const folder = await Folder.get(folderId);
             if (folder) {
                 if (parseInt(folder.ownerId) !== parseInt(userId)) {
                     throw createError(403, "You do not have permission to upload this file");
                 }
+
+                if (groupId) {
+                    if (folder.groupId != groupId) {
+                        return next(404, "Folder not exist in group")
+                    }
+                }
             }
 
+            let destUserFolder = `user-${userId}`;
 
-            const destUserFolder = `user-${userId}`;
+            // If groupId exist
+            if (groupId) {
+                const group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+
+                if (group) {
+                    if (group.type == TypeGroup.PUBLIC) {
+                        privacy = TypePrivacy.PUBLIC
+                    } else if (group.type == TypeGroup.PRIVATE) {
+                        privacy = TypePrivacy.PRIVATE_GROUP
+                    }
+                    from = UploadDocumentWhere.GROUP
+                    destUserFolder = `group-${group.id}/user-${userId}`
+                }
+            }
+
 
             let fullPathFolder;
             if (folderId) {
@@ -45,7 +74,8 @@ module.exports = {
 
             uploadFileToGCS(file.buffer, file.originalname, destFolder, { replace }, async (err, result) => {
                 if (err) {
-                    throw createError(500, "Error when upload file");
+                    console.log(err);
+                    return next(createError(500, "Error when upload file"));
                 }
 
                 const newFile = new File({
@@ -55,7 +85,8 @@ module.exports = {
                     from,
                     ownerId: parseInt(userId),
                     groupId,
-                    folderId
+                    folderId,
+                    privacy
                 })
 
                 await newFile.save();
@@ -69,7 +100,8 @@ module.exports = {
             })
 
         } catch (e) {
-            next(e);
+            console.log(e);
+            next(createError(500, "Error when uploading file"))
         }
     },
     // UPLOAD FOLDER
@@ -79,20 +111,51 @@ module.exports = {
             const files = req.files;
             const replace = req.body.replace ?? false;
             const parentFolderId = parseInt(req.body.parentFolderId);
-            const from = req.body.from;
-            const groupId = req.body.groupId;
+            let from = req.body.from ?? UploadDocumentWhere.USER;
+            const groupId = req.params.groupId;
+            let privacy = req.body.privacy;
             if (!files) {
-                throw createError(400, "No file uploaded.");
+                return next(400, "No file uploaded.");
             }
 
-            const destUserFolder = `user-${userId}`;
+            let destUserFolder = `user-${userId}`;
+
+            // If groupId exist
+            if (groupId) {
+                const group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+
+                if (group) {
+                    if (group.type == TypeGroup.PUBLIC) {
+                        privacy = TypePrivacy.PUBLIC
+                    } else if (group.type == TypeGroup.PRIVATE) {
+                        privacy = TypePrivacy.PRIVATE_GROUP
+                    }
+                    destUserFolder = `group-${group.id}/user-${userId}`
+                    from = UploadDocumentWhere.GROUP
+                }
+            }
+
             const folder = req.body.folder;
             if (!folder) throw createError(400, "No folder to upload");
 
-            const parentFolder = await Folder.get(parentFolderId);
-            if (parentFolder) {
-                if (parentFolder.ownerId !== parseInt(userId)) {
-                    throw createError(403, "You do not have permission to delete this file");
+            if (parentFolderId) {
+                const parentFolder = await Folder.get(parentFolderId);
+                if (parentFolder) {
+                    if (parentFolder.ownerId !== parseInt(userId)) {
+                        return next(createError(403, "You do not have permission to delete this file"))
+                    }
+
+                    if (groupId) {
+                        if (parentFolder.groupId != groupId) {
+                            return next(createError(404, "Folder not exist in group"))
+                        }
+                    }
+                } else {
+                    return next(createError(404, "Folder not exist"))
                 }
             }
 
@@ -101,10 +164,13 @@ module.exports = {
             if (parentFolderId) {
                 fullPathParentFolder = await Folder.getFullPathFolder(parentFolderId) + "/"
             }
+
             const destFolder = `${destUserFolder}/${fullPathParentFolder ?? ""}${folder}`
+
             uploadFolderToGCS(files, destFolder, { replace }, async (err, { results, folder }) => {
                 if (err) {
-                    throw createError(500, "Error when upload file");
+                    console.log(err)
+                    return next(createError(500, "Error when uploading folder"))
                 }
 
                 const newFolder = new Folder({
@@ -114,7 +180,8 @@ module.exports = {
                     ownerId: userId,
                     parentFolderId,
                     from,
-                    groupId
+                    groupId,
+                    privacy
                 });
 
                 if (replace) {
@@ -194,7 +261,8 @@ module.exports = {
             })
 
         } catch (e) {
-            next(e);
+            console.log(e)
+            next(createError(500, "Error when uploading folder"))
         }
     },
     // DELETE FILE
@@ -204,12 +272,56 @@ module.exports = {
             const userId = parseInt(req.payload.aud);
             if (!fileId) throw createError(400, "No file to delete");
 
-            const file = await File.get(fileId);
+            // const file = await File.get(fileId);
+            const file = await File.model.findUnique({
+                where: {
+                    id: parseInt(fileId)
+                }
+            });
             if (!file) throw createError(400, "File not exist")
 
-            if (file.ownerId !== userId) {
-                throw createError(403, "You do not have permission to delete this file");
+            const groupId = req.params.groupId;
+
+            if (!groupId && file.groupId) {
+                return next(createError(404, "Not permission to delete folder"))
             }
+
+            let isAccess = true;
+
+            if (file.ownerId !== userId) {
+                isAccess = false;
+            }
+
+            if (groupId) {
+                const group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+
+                if (group) {
+                    const groupPermission = await prisma.userAttendGroup.findFirst({
+                        where: {
+                            groupId: group.id,
+                            userId: parseInt(userId)
+                        }
+                    })
+
+                    if (file.groupId != group.id) {
+                        return next(createError(404, "File not exist in group"))
+                    }
+
+                    if (groupPermission.permission == GroupPermission.ADMIN) {
+                        isAccess = true;
+                    }
+                }
+            }
+
+
+            if (!isAccess) {
+                return next(createError(403, "You do not have permission to delete this file"));
+            }
+
 
             const pathFileArray = file.url.split("/");
             pathFileArray.shift();
@@ -242,8 +354,46 @@ module.exports = {
             const folder = await Folder.get(folderId);
             if (!folder) throw createError(400, "Folder not exist")
 
+            const groupId = req.params.groupId;
+
+            if (!groupId && folder.groupId) {
+                return next(createError(404, "Not permission to delete folder"))
+            }
+
+            let isAccess = true;
+
             if (folder.ownerId !== userId) {
-                throw createError(403, "You do not have permission to upload this folder");
+                isAccess = false;
+            }
+
+            if (groupId) {
+                const group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+
+                if (group) {
+                    const groupPermission = await prisma.userAttendGroup.findFirst({
+                        where: {
+                            groupId: group.id,
+                            userId: parseInt(userId)
+                        }
+                    })
+
+                    if (folder.groupId != group.id) {
+                        return next(createError(404, "Folder not exist in group"))
+                    }
+
+                    if (groupPermission.permission == GroupPermission.ADMIN) {
+                        isAccess = true;
+                    }
+                }
+            }
+
+
+            if (!isAccess) {
+                return next(createError(403, "You do not have permission to delete this file"));
             }
 
             const pathFolderArray = folder.url.split("/");
@@ -272,15 +422,30 @@ module.exports = {
         try {
             const userId = parseInt(req.payload.aud);
             const folderId = req.query.folder;
-            const folders = await Folder.getAll({
-                where: {
-                    ownerId: userId,
-                    parentFolderId: parseInt(folderId) ?? null,
-                },
-                orderBy: {
-                    title: "asc"
-                }
-            })
+            const groupId = req.params.groupId;
+
+            let folders = [];
+            if (groupId) {
+                folders = await Folder.getAll({
+                    where: {
+                        groupId: parseInt(groupId),
+                        parentFolderId: parseInt(folderId) ?? null,
+                    },
+                    orderBy: {
+                        title: "asc"
+                    }
+                })
+            } else {
+                folders = await Folder.getAll({
+                    where: {
+                        ownerId: userId,
+                        parentFolderId: parseInt(folderId) ?? null,
+                    },
+                    orderBy: {
+                        title: "asc"
+                    }
+                })
+            }
 
             const folderStructure = folders.map(folder => {
                 return {
@@ -322,13 +487,51 @@ module.exports = {
         try {
             const fileId = req.params.fileId;
             const userId = parseInt(req.payload.aud);
-            if (!fileId) throw createError(400, "No file to delete");
+            if (!fileId) throw createError(400, "No file to download");
 
             const file = await File.get(fileId);
             if (!file) throw createError(400, "File not exist")
 
+            const groupId = req.params.groupId;
+
+            if (!groupId && file.groupId) {
+                return next(createError(404, "Not permission to download file"))
+            }
+
+            let isAccess = true;
+
             if (file.ownerId !== userId) {
-                throw createError(403, "You do not have permission to delete this file");
+                isAccess = false;
+            }
+
+            if (groupId) {
+                const group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+
+                if (group) {
+                    const groupPermission = await prisma.userAttendGroup.findFirst({
+                        where: {
+                            groupId: group.id,
+                            userId: parseInt(userId)
+                        }
+                    })
+
+                    if (file.groupId != group.id) {
+                        return next(createError(404, "File not exist in group"))
+                    }
+
+                    if (groupPermission.permission == GroupPermission.ADMIN) {
+                        isAccess = true;
+                    }
+                }
+            }
+
+
+            if (!isAccess) {
+                return next(createError(403, "You do not have permission to download this file"));
             }
 
             const pathFileArray = file.url.split("/");
@@ -354,16 +557,55 @@ module.exports = {
     getFolder: async (req, res, next) => {
         try {
             const folderId = req.params.folderId;
-            // const userId = req.payload.aud;
+            const userId = req.payload.aud;
 
             if (!folderId) throw createError(400, "No folder to delete");
 
             const folder = await Folder.get(folderId);
             if (!folder) throw createError(400, "Folder not exist")
 
-            // if (folder.ownerId !== userId) {
-            //     throw createError(403, "You do not have permission to upload this folder");
-            // }
+            const groupId = req.params.groupId;
+
+            if (!groupId && folder.groupId) {
+                return next(createError(404, "Not permission to delete folder"))
+            }
+
+            let isAccess = true;
+
+            if (folder.ownerId !== userId) {
+                isAccess = false;
+            }
+
+            if (groupId) {
+                const group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+
+                if (group) {
+                    const groupPermission = await prisma.userAttendGroup.findFirst({
+                        where: {
+                            groupId: group.id,
+                            userId: parseInt(userId)
+                        }
+                    })
+
+                    if (folder.groupId != group.id) {
+                        return next(createError(404, "Folder not exist in group"))
+                    }
+
+                    if (groupPermission.permission == GroupPermission.ADMIN) {
+                        isAccess = true;
+                    }
+                }
+            }
+
+
+            if (!isAccess) {
+                return next(createError(403, "You do not have permission to delete this file"));
+            }
+
 
             const pathFolderArray = folder.url.split("/");
             pathFolderArray.shift();

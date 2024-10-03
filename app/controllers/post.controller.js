@@ -3,17 +3,45 @@ const Post = require("../models/post.model");
 const Media = require("../models/media.model");
 const prisma = require("../services/prisma");
 const { deleteMediaFromCloudinary } = require("../utils/cloudinary/delete.util");
-const { TypePost, UploadPostWhere } = require("@prisma/client");
+const { TypePost, UploadPostWhere, TypeGroup, TypePrivacy } = require("@prisma/client");
 const Comment = require("../models/comment.model");
+const Group = require("../models/groups/group.model");
 
 const postController = {
     //------- CREATE POST --------//
     createPost: async (req, res, next) => {
         try {
-            const { content, captions = [], files, folders, groupId, privacy } = req.body;
+            const { content, files, folders } = req.body;
+            let privacy = req.body.privacy;
             const ownerId = parseInt(req.payload.aud);
+            const groupId = req.params.groupId;
+            let captions = req.body.captions ?? []
+
+            if (typeof (captions) == 'string') captions = [captions]
 
             const from = groupId ? UploadPostWhere.GROUP : UploadPostWhere.USER;
+
+            let group = null;
+            if (groupId) {
+                group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+            }
+
+            let isApproved = true;
+            if (group) {
+                if (group.approvalRequired) {
+                    isApproved = false;
+                }
+
+                if (group.type == TypeGroup.PUBLIC) {
+                    privacy = TypePrivacy.PUBLIC
+                } else if (group.type == TypeGroup.PRIVATE) {
+                    privacy = TypePrivacy.PRIVATE_GROUP
+                }
+            }
 
             // Tạo bài đăng
             const post = new Post({
@@ -23,7 +51,8 @@ const postController = {
                 folders,
                 privacy,
                 from,
-                groupId
+                groupId,
+                isApproved
             });
 
             const postSaved = await post.save();
@@ -31,7 +60,7 @@ const postController = {
             const medias = req.files
 
             for (const [index, media] of medias.entries()) {
-                const caption = medias.length > 1 ? captions[index] : captions;
+                const caption = captions[index];
                 const newMedia = new Media({
                     url: media.path,
                     postId: postSaved.id,
@@ -51,18 +80,46 @@ const postController = {
                 }
             })
 
-            res.status(200).json(postCreate)
+            return res.status(200).json(postCreate)
         } catch (e) {
             console.log(e);
-            next(createError(500, "Error when create post"))
+            const medias = req.files;
+            for (const media of medias) {
+                const result = await deleteMediaFromCloudinary(media);
+                if (result != 'ok') return next(createError(500, "Error when create post"))
+            }
+            return next(createError(500, "Error when create post"))
         }
     },
     //------- UPDATE POST --------//
     updatePost: async (req, res, next) => {
         try {
-            const { content = null, privacy = null, captions = [], files = [], folders = [] } = req.body;
+            const { content = null, files = [], folders = [] } = req.body;
             const { postId } = req.params;
             const userId = req.payload.aud;
+            let privacy = req.body.privacy;
+            let captions = req.body.captions ?? []
+
+            if (typeof (captions) == 'string') captions = [captions]
+
+            const groupId = req.params.groupId;
+
+            let group = null;
+            if (groupId) {
+                group = await Group.model.findUnique({
+                    where: {
+                        id: parseInt(groupId)
+                    }
+                })
+            }
+
+            if (group) {
+                if (group.type == TypeGroup.PUBLIC) {
+                    privacy = TypePrivacy.PUBLIC
+                } else if (group.type == TypeGroup.PRIVATE) {
+                    privacy = TypePrivacy.PRIVATE_GROUP
+                }
+            }
 
             const post = new Post({
                 id: parseInt(postId),
@@ -74,16 +131,6 @@ const postController = {
             })
 
             const postUpdated = await post.save();
-
-            // const ids = Object.keys(captions)
-            // for (const id of ids) {
-            //     const media = new Media({
-            //         id: parseInt(id),
-            //         caption: captions[id]
-            //     })
-
-            //     await media.save();
-            // }
 
             const mediaOlds = await Media.model.findMany({
                 where: {
@@ -109,7 +156,7 @@ const postController = {
             const medias = req.files
 
             for (const [index, media] of medias.entries()) {
-                const caption = medias.length > 1 ? captions[index] : captions;
+                const caption = captions[index];
                 const newMedia = new Media({
                     url: media.path,
                     postId: postUpdated.id,
@@ -129,7 +176,7 @@ const postController = {
                 }
             })
 
-            res.status(200).json(postUpdatedSuccessfull);
+            return res.status(200).json(postUpdatedSuccessfull);
         } catch (e) {
             console.log(e);
             next(createError(500, "Error when update post"))
@@ -157,10 +204,10 @@ const postController = {
 
             const postDeleted = await Post.delete(postId);
 
-            res.send(postDeleted);
+            return res.send(postDeleted);
         } catch (e) {
             console.log(e)
-            next(createError(500, "Error when delete post"))
+            return next(createError(500, "Error when delete post"))
         }
     },
     //------- LIKE POST --------//
@@ -168,6 +215,17 @@ const postController = {
         try {
             const postId = req.params.postId;
             const userId = req.payload.aud;
+
+            if (!postId) return next(createError(400, "Post not exist"))
+
+            const post = await Post.model.findFirst({
+                where: {
+                    id: parseInt(postId),
+                    isApproved: true
+                }
+            })
+
+            if (!post) return next(createError(403, "Not access this post"))
 
             const postLiked = await Post.like({
                 postId,
@@ -186,6 +244,17 @@ const postController = {
             const { postId } = req.params;
             const { content, privacy } = req.body;
             const userId = req.payload.aud;
+
+            if (!postId) return next(createError(400, "Post not exist"))
+
+            const post = await Post.model.findFirst({
+                where: {
+                    id: parseInt(postId),
+                    isApproved: true
+                }
+            })
+
+            if (!post) return next(createError(403, "Not access this post"))
 
             const postShare = new Post({
                 content: content,
@@ -221,6 +290,18 @@ const postController = {
             const userId = req.payload.aud;
             const { content, url } = req.body;
 
+            if (!postId) return next(createError(400, "Post not exist"))
+
+            const post = await Post.model.findFirst({
+                where: {
+                    id: parseInt(postId),
+                    isApproved: true
+                }
+            })
+
+            if (!post) return next(createError(403, "Not access this post"))
+
+
             const comment = new Comment({
                 content,
                 url,
@@ -245,6 +326,17 @@ const postController = {
             const userId = req.payload.aud;
             const { content, url } = req.body;
 
+            if (!postId) return next(createError(400, "Post not exist"))
+
+            const post = await Post.model.findFirst({
+                where: {
+                    id: parseInt(postId),
+                    isApproved: true
+                }
+            })
+
+            if (!post) return next(createError(403, "Not access this post"))
+
             const comment = new Comment({
                 content,
                 url,
@@ -268,6 +360,17 @@ const postController = {
         try {
             const { commentId } = req.params
             const userId = req.payload.aud
+
+            if (!commentId) return next(createError(400, "Post not exist"))
+
+            const comment = await Comment.model.findUnique({
+                where: {
+                    id: parseInt(commentId),
+                }
+            })
+
+            if (!comment) return next(createError(403, "Not access this comment"))
+
 
             const commentLiked = await Comment.like({
                 commentId: parseInt(commentId),

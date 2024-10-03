@@ -3,9 +3,10 @@ const config = require("../config");
 
 const storage = new Storage({
     keyFile: config.google.credential,
-    projectId: "fisnote"
+    projectId: "fisnote-437407"
 });
 
-const bucket = storage.bucket("fisnote-bucket");
+
+const bucket = storage.bucket("fisnote");
 
 module.exports = bucket;

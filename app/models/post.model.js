@@ -37,8 +37,8 @@ class Post {
         this.from = from;
         this.ownerId = parseInt(ownerId);
         this.groupId = groupId ? parseInt(groupId) : null;
-        this.files = files;
-        this.folders = folders;
+        this.files = typeof (files) == 'string' ? [files] : files;
+        this.folders = typeof (folders) == 'string' ? [folders] : folders;
         this.userLikes = userLikes;
         this.userShare = userShare;
         this.postShareId = postShareId ? parseInt(postShareId) : null;
@@ -121,7 +121,7 @@ class Post {
             }
 
             if (this.groupId) {
-                postData.groupId = {
+                postData.group = {
                     connect: {
                         id: this.groupId
                     }

@@ -23,6 +23,6 @@ documentRoute.get("/document", verifyAccessToken, getStructureDocument)
 
 documentRoute.get("/document/file/:fileId", verifyAccessToken, getFile)
 
-documentRoute.get("/document/folder/:folderId", getFolder)
+documentRoute.get("/document/folder/:folderId", verifyAccessToken, getFolder)
 
 module.exports = documentRoute;

@@ -3,19 +3,20 @@ const { uploadMediaToCloudinary } = require("../utils/cloudinary/upload.util");
 const postController = require("../controllers/post.controller");
 const { verifyAccessToken } = require("../utils/jwt.util");
 const { accessPost, accessOwnPost, accessComment } = require("../utils/access.util");
+const userAccess = require("../security/user.access.right");
 
 const postRoute = express.Router();
 
 //--------- API Post---------//
 
 //--- Create post
-postRoute.post("/post", verifyAccessToken, uploadMediaToCloudinary.array("media", 10), postController.createPost)
+postRoute.post("/post", verifyAccessToken, uploadMediaToCloudinary.array("media", 10), userAccess.document, postController.createPost)
 
 //--- Delete post
 postRoute.delete("/post/:postId", verifyAccessToken, accessOwnPost, postController.deletePost)
 
 //--- Update post
-postRoute.put("/post/:postId", verifyAccessToken, accessOwnPost, uploadMediaToCloudinary.array("media", 10), postController.updatePost)
+postRoute.put("/post/:postId", verifyAccessToken, accessOwnPost, uploadMediaToCloudinary.array("media", 10), userAccess.document, postController.updatePost)
 
 //--- Like post
 postRoute.post("/post/:postId/like", verifyAccessToken, accessPost, postController.likePost)

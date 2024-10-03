@@ -1,6 +1,7 @@
 const { UploadDocumentWhere } = require("@prisma/client");
 const prisma = require("../../services/prisma");
 const Folder = require("./folder.model");
+const { cleanData } = require("../../utils/helper.util");
 
 class File {
     static get model() {
@@ -13,6 +14,7 @@ class File {
         url,
         size,
         from,
+        privacy,
         ownerId,
         groupId = null,
         folderId = null
@@ -22,6 +24,7 @@ class File {
         this.url = url;
         this.size = size;
         this.from = from ?? UploadDocumentWhere.USER;
+        this.privacy = privacy;
         this.ownerId = parseInt(ownerId);
         this.groupId = parseInt(groupId);
         this.folderId = parseInt(folderId);
@@ -33,6 +36,7 @@ class File {
             url: this.url,
             size: BigInt(this.size),
             from: this.from,
+            privacy: this.privacy,
             ownerId: this.ownerId,
             groupId: this.groupId,
             folderId: this.folderId
