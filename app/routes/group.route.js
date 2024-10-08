@@ -32,8 +32,10 @@ groupRoute.delete("/group/:groupId", verifyAccessToken, accessGroup({ owner: tru
 
 //-------- API Group Post --------- //
 
-//--- Approve post
+//--- Accept post
 groupRoute.put("/group/:groupId/post/:postId/accept", verifyAccessToken, accessGroup({ permission: GroupPermission.ADMIN }), groupAccess.postExist, groupController.acceptPost)
+
+//--- Refuse post
 groupRoute.delete("/group/:groupId/post/:postId/refuse", verifyAccessToken, accessGroup({ permission: GroupPermission.ADMIN }), groupAccess.postExist, groupController.refusePost)
 
 //--- Create post

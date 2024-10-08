@@ -37,6 +37,10 @@ module.exports = {
                     throw createError(403, "You do not have permission to upload this file");
                 }
 
+                if (folder.from == UploadDocumentWhere.MESSAGE || folder.from == UploadDocumentWhere.GROUP) {
+                    return next(createError(400, "Folder not valid to upload"))
+                }
+
                 if (groupId) {
                     if (folder.groupId != groupId) {
                         return next(404, "Folder not exist in group")
@@ -78,10 +82,12 @@ module.exports = {
                     return next(createError(500, "Error when upload file"));
                 }
 
+
+
                 const newFile = new File({
                     title: result.fileName,
                     url: result.url,
-                    size: BigInt(result.size),
+                    size: parseFloat(result.size),
                     from,
                     ownerId: parseInt(userId),
                     groupId,
@@ -90,6 +96,8 @@ module.exports = {
                 })
 
                 await newFile.save();
+
+
 
                 // Trả về URL công khai của file đã tải lên
                 res.status(200).send({
@@ -149,6 +157,11 @@ module.exports = {
                         return next(createError(403, "You do not have permission to delete this file"))
                     }
 
+
+                    if (parentFolder.from == UploadDocumentWhere.MESSAGE || parentFolder.from == UploadDocumentWhere.GROUP) {
+                        return next(createError(400, "Folder not valid to upload"))
+                    }
+
                     if (groupId) {
                         if (parentFolder.groupId != groupId) {
                             return next(createError(404, "Folder not exist in group"))
@@ -176,7 +189,7 @@ module.exports = {
                 const newFolder = new Folder({
                     title: folder.folderName,
                     url: folder.url,
-                    size: BigInt(folder.size),
+                    size: parseFloat(folder.size),
                     ownerId: userId,
                     parentFolderId,
                     from,
@@ -188,7 +201,8 @@ module.exports = {
                     const replaceFolder = await prisma.folder.findFirst({
                         where: {
                             title: folder.folderName,
-                            parentFolderId
+                            parentFolderId,
+                            ownerId: parseInt(userId)
                         }
                     })
 
@@ -203,7 +217,7 @@ module.exports = {
                                 data: {
                                     title: result.fileName,
                                     url: result.url,
-                                    size: BigInt(result.size),
+                                    size: parseFloat(result.size),
                                     from,
                                     ownerId: userId,
                                     groupId,
@@ -213,16 +227,14 @@ module.exports = {
                         })
 
                         await newFolder.save()
-
                     } else {
-                        await newFolder.save();
 
                         results.forEach(async (result) => {
                             await prisma.file.create({
                                 data: {
                                     title: result.fileName,
                                     url: result.url,
-                                    size: BigInt(result.size),
+                                    size: parseFloat(result.size),
                                     from,
                                     ownerId: userId,
                                     groupId,
@@ -230,6 +242,8 @@ module.exports = {
                                 }
                             })
                         })
+
+                        await newFolder.save();
                     }
 
                 } else {
@@ -240,7 +254,7 @@ module.exports = {
                             data: {
                                 title: result.fileName,
                                 url: result.url,
-                                size: BigInt(result.size),
+                                size: parseFloat(result.size),
                                 from,
                                 ownerId: userId,
                                 groupId,

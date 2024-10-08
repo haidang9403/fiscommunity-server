@@ -104,7 +104,7 @@ const userAccess = {
             }
             return next(createError(500, "Error when access document"))
         }
-    }
+    },
 }
 
 module.exports = userAccess;

@@ -18,8 +18,8 @@ model User {
   email        String @unique
   password     String
   phone        String?
-  totalStorage BigInt @default(0)
-  limitStorage BigInt @default(5000)
+  totalStorage Float @default(0)
+  limitStorage Float @default(5000)
   refreshToken String?
 
   createdAt DateTime @default(now())
@@ -55,6 +55,8 @@ model User {
   notifications Notify[] @relation("ReciveNotify")
 
   sendNotifications Notify[] @relation("SendNotify")
+
+  adminConversations Conversation[] @relation("AdminConversation")
 }
 
 model UserRelation {
@@ -206,7 +208,7 @@ model File {
   id      Int     @id @default(autoincrement())
   title   String
   url     String
-  size    BigInt
+  size    Float
   from    UploadDocumentWhere @default(USER)
   privacy TypePrivacy @default(PUBLIC)
 
@@ -232,7 +234,7 @@ model Folder {
   id      Int     @id @default(autoincrement())
   title   String
   url     String
-  size    BigInt
+  size    Float
   from    UploadDocumentWhere @default(USER)
   privacy TypePrivacy @default(PUBLIC)
 
@@ -263,8 +265,8 @@ model Group {
   groupName    String
   bio          String?
   avatar       String?
-  totalStorage BigInt  @default(0)
-  limitStorage BigInt  @default(5000)
+  totalStorage Float  @default(0)
+  limitStorage Float  @default(5000)
 
   type TypeGroup @default(PRIVATE)
   approvalRequired Boolean @default(false) 
@@ -326,14 +328,16 @@ model Conversation {
   name          String
   isGroup       Boolean  @default(false)
   lastMessageAt DateTime @default(now())
-  totalStorage  BigInt   @default(0)
-  limitStorage  BigInt   @default(5000)
+  totalStorage  Float   @default(0)
+  limitStorage  Float   @default(5000)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   // relation
   user User[] @relation("UserConversation")
+
+  admins User[] @relation("AdminConversation")
 
   messages Message[]
 }
@@ -360,16 +364,17 @@ model Message {
   seens User[] @relation("SeenMessage")
 
   fileId         Int?
-  file           File?          @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  file           File?          @relation(fields: [fileId], references: [id], onDelete: SetNull)
 
   folderId       Int?
-  folder         Folder?        @relation(fields: [folderId], references: [id], onDelete: Cascade)
+  folder         Folder?        @relation(fields: [folderId], references: [id], onDelete: SetNull)
 
   postId         Int?
-  post           Post?          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  post           Post?          @relation(fields: [postId], references: [id], onDelete: SetNull)
 }
 
 enum TypeMessage {
+  UN_SEND
   TEXT
   MEDIA
   FILE

@@ -88,7 +88,7 @@ class Folder {
             )
 
             if (currentSize != this.size) {
-                await this.updateSizeParentFolder({ isChange: true, changeSize: parseInt(this.size) - parseInt(currentSize) })
+                await this.updateSizeParentFolder({ isChange: true, changeSize: parseFloat(this.size) - parseFloat(currentSize) })
             }
 
             // Cập nhật thư mục
@@ -129,9 +129,9 @@ class Folder {
                 if (parentFolder) {
                     let size;
                     if (isCreated) {
-                        size = parseInt(parentFolder.size) + parseInt(currentFolder.size);
+                        size = parseFloat(parentFolder.size) + parseFloat(currentFolder.size);
                     } else if (isChange) {
-                        size = parseInt(parentFolder.size) + parseInt(changeSize);
+                        size = parseFloat(parentFolder.size) + parseFloat(changeSize);
                     }
 
                     await prisma.folder.update({
@@ -139,7 +139,7 @@ class Folder {
                             id: parentFolder.id
                         },
                         data: {
-                            size: BigInt(size)
+                            size: parseFloat(size)
                         }
                     })
                     currentFolder = parentFolder;  // Chuyển tiếp tới thư mục cha tiếp theo
@@ -200,7 +200,7 @@ class Folder {
                     const currentFolder = new Folder({ ...parentFolder })
                     await currentFolder.update({
                         data: {
-                            size: BigInt(parseInt(parentFolder.size) + parseInt(gapSize))
+                            size: parseFloat(parentFolder.size) + parseFloat(gapSize)
                         }
                     })
                 }

@@ -73,9 +73,9 @@ const uploadFileToGCS = async (fileBuffer, fileName, destFolder, options = { rep
             // await blob.makePrivate();
             // Lấy thông tin về file
             const [metadata] = await blob.getMetadata();
-            const fileSizeKBytes = parseInt(Math.ceil((metadata.size / 1024)));
+            const fileSizeMB = (metadata.size / (1024 * 1024)).toFixed(4);
             const publicUrl = format(`${bucket.name}/${blob.name}`);
-            callback(null, { fileName, url: publicUrl, size: fileSizeKBytes });
+            callback(null, { fileName, url: publicUrl, size: fileSizeMB });
         });
 
         // Ghi dữ liệu file lên Cloud Storage
@@ -140,14 +140,14 @@ const uploadFolderToGCS = async (files, destFolder, options = { replace: false }
         await Promise.all(uploadPromises);
 
         const totalSize = results.reduce((total, result) => {
-            return total + parseInt(result.size)
+            return (parseFloat(total) + parseFloat(result.size))
         }, 0)
 
         const folderName = destFolder.split("/").filter(Boolean).pop();
 
         const folder = {
             folderName,
-            size: totalSize,
+            size: totalSize.toFixed(4),
             url: bucket.name + "/" + destFolder
         }
 

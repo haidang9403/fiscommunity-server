@@ -33,7 +33,7 @@ class Group {
             bio: this.bio,
             avatar: this.avatar,
             totalStorage: this.totalStorage !== 0 && this.totalStorage <= this.limitStorage
-                ? BigInt(this.totalStorage)
+                ? parseFloat(this.totalStorage)
                 : undefined,
             approvalRequired: this.approvalRequired,
             type: this.type,
@@ -48,7 +48,7 @@ class Group {
             return await prisma.group.create({
                 data: {
                     ...this._cleanData(data),
-                    limitStorage: BigInt(this.limitStorage),
+                    limitStorage: parseFloat(this.limitStorage),
                     owner: { connect: { id: this.ownerId } },
                 },
             });

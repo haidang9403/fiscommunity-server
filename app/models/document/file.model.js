@@ -34,7 +34,7 @@ class File {
         return {
             title: this.title,
             url: this.url,
-            size: BigInt(this.size),
+            size: parseFloat(this.size),
             from: this.from,
             privacy: this.privacy,
             ownerId: this.ownerId,
@@ -49,7 +49,9 @@ class File {
         const replaceFile = await prisma.file.findFirst({
             where: {
                 title: this.title,
-                folderId: this.folderId
+                folderId: this.folderId,
+                ownerId: this.ownerId,
+                from: this.from
             }
         })
 
@@ -79,7 +81,7 @@ class File {
                     const currentFolder = new Folder({ ...folder })
                     await currentFolder.update({
                         data: {
-                            size: BigInt(parseInt(folder.size) + gapSize)
+                            size: parseFloat(folder.size) + gapSize
                         }
                     })
                 }
@@ -98,7 +100,7 @@ class File {
             })
 
             if (this.folderId) {
-                const gapSize = parseInt(this.size) - parseInt(currentSize);
+                const gapSize = this.size - parseFloat(currentSize);
                 const folder = await prisma.folder.findUnique({
                     where: {
                         id: this.folderId
@@ -110,7 +112,7 @@ class File {
                     const currentFolder = new Folder({ ...folder })
                     await currentFolder.update({
                         data: {
-                            size: BigInt(parseInt(folder.size) + gapSize)
+                            size: parseFloat(folder.size) + gapSize
                         }
                     })
                 }
@@ -131,7 +133,7 @@ class File {
 
                 await currentFolder.update({
                     data: {
-                        size: BigInt(parseInt(folder.size) + parseInt(file.size))
+                        size: parseFloat(folder.size) + parseFloat(file.size)
                     }
                 })
             }
@@ -180,7 +182,7 @@ class File {
                 const currentFolder = new Folder({ ...folder })
                 await currentFolder.update({
                     data: {
-                        size: BigInt(parseInt(folder.size) + parseInt(gapSize))
+                        size: parseFloat(folder.size) + parseFloat(gapSize)
                     }
                 })
             }
