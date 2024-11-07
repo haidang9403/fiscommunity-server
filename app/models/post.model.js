@@ -178,7 +178,7 @@ class Post {
             const userLiked = post.userLikes.some(user => parseInt(userId) == user.id)
 
             if (userLiked) {
-                return await prisma.post.update({
+                await prisma.post.update({
                     where: {
                         id: parseInt(postId),
                     },
@@ -192,7 +192,7 @@ class Post {
                     }
                 })
             } else {
-                return await prisma.post.update({
+                await prisma.post.update({
                     where: {
                         id: parseInt(postId),
                     },
@@ -206,6 +206,8 @@ class Post {
                     }
                 })
             }
+
+            return !userLiked;
         } else return null;
     }
 

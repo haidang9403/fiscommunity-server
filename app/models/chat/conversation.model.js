@@ -33,7 +33,39 @@ class Conversation {
                         }
                     }
                 ]
-            }
+            },
+            include: {
+                user: {
+                    include: {
+                        userProfile: true
+                    }
+                },
+                messages: {
+                    include: {
+                        sender: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        seens: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        file: true,
+                        folder: true
+                    },
+                    orderBy: {
+                        createdAt: "desc"
+                    },
+                    take: 20
+                },
+                admins: {
+                    include: {
+                        userProfile: true
+                    }
+                }
+            },
         });
 
         if (existingConversation) {
@@ -64,8 +96,37 @@ class Conversation {
                 },
                 data: dataUpdate,
                 include: {
-                    user: true
-                }
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    messages: {
+                        include: {
+                            sender: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            seens: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            file: true,
+                            folder: true
+                        },
+                        orderBy: {
+                            createdAt: "desc"
+                        },
+                        take: 20
+                    },
+                    admins: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                },
             });
         } else {
             conversation = await prisma.conversation.create({
@@ -82,7 +143,36 @@ class Conversation {
                     }
                 },
                 include: {
-                    user: true,
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    messages: {
+                        include: {
+                            sender: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            seens: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            file: true,
+                            folder: true
+                        },
+                        orderBy: {
+                            createdAt: "desc"
+                        },
+                        take: 20
+                    },
+                    admins: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
                 },
             });
         }

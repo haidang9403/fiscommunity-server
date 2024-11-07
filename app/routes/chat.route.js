@@ -8,58 +8,66 @@ const chatAccess = require("../security/chat.access.right");
 const chatRoute = express.Router();
 
 // ------------ API Chat --------------- //
+//--- Get conversation of user
+chatRoute.get("/conversation", verifyAccessToken, chatController.getConversation)
+chatRoute.get("/info/conversation", verifyAccessToken, chatController.getInfoConversation)
+
+chatRoute.get("/conversation/:conversationId", verifyAccessToken, chatController.getMessages)
+chatRoute.get("/conversation/:conversationId/media", verifyAccessToken, chatController.getMessageMedia)
+chatRoute.get("/conversation/:conversationId/file", verifyAccessToken, chatController.getMessageFiles)
+
 
 //--- Create conversation with one person
 chatRoute.post("/conversation/user/:userId", verifyAccessToken, chatController.createConversationOne)
 
-//--- Update conversation
+//--- Update conversation -- socket
 chatRoute.put("/conversation/:conversationId", verifyAccessToken, chatAccess.roleAdmin, chatController.updateConversation)
 
-//--- Delete conversation
+//--- Delete conversation -- socket
 chatRoute.delete("/conversation/:conversationId", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
 
-//--- Chat message text
+//--- Chat message text -- socket
 chatRoute.post("/conversation/:conversationId/message", verifyAccessToken, chatAccess.checkValidConversation, chatAccess.relation, chatController.sendTextMessage)
 
-//--- Chat message media
+//--- Chat message media -- socket
 chatRoute.post("/conversation/:conversationId/message/media", verifyAccessToken, chatAccess.checkValidConversation, chatAccess.relation, uploadMediaToCloudinary.array("media"), chatController.sendMediaMessage)
 
-//--- Chat message file
+//--- Chat message file -- socket
 chatRoute.post("/conversation/:conversationId/message/file", verifyAccessToken, chatAccess.checkValidConversation, chatAccess.relation, uploadMiddleware.single('file'), chatController.sendFileMessage)
 
-//--- Chat message folder
+//--- Chat message folder -- socket
 chatRoute.post("/conversation/:conversationId/message/folder", verifyAccessToken, chatAccess.checkValidConversation, chatAccess.relation, uploadMiddleware.array('files'), chatController.sendFolderMessage)
 
-//--- Seen message
-chatRoute.post("/conversation/:conversationId/message/:messageId/seen", verifyAccessToken, chatAccess.checkValidConversation, chatAccess.checkValidMesage, chatController.seenMeesage)
+//--- Seen message -- socket
+chatRoute.post("/conversation/:conversationId/seen", verifyAccessToken, chatAccess.checkValidConversation, chatController.seenMeesage)
 
-//--- Delete message
+//--- Delete message 
 chatRoute.delete("/conversation/:conversationId/message/:messageId/delete", verifyAccessToken, chatAccess.message, chatController.deleteMessage)
 
-//--- Unsend message
+//--- Unsend message -- socket
 chatRoute.delete("/conversation/:conversationId/message/:messageId/retrieve", verifyAccessToken, chatAccess.message, chatController.unsendMessage)
 
-//--- Hard delete message
+//--- Hard delete message -- socket
 chatRoute.delete("/conversation/:conversationId/message/:messageId/hard-delete", verifyAccessToken, chatAccess.message, chatController.hardDeleteMessage)
 
 // ------------ API Chat Group --------------- //
 
-//--- Create conversation group
+//--- Create conversation group -- socket
 chatRoute.post("/conversation/group", verifyAccessToken, chatController.createConversationGroup)
 
-// --- Delete conversation group
+// --- Delete conversation group -- socket
 chatRoute.delete("/conversation/:conversationId/group", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
 
-//--- Addmember to group
+//--- Addmember to group -- socket
 chatRoute.put("/conversation/:conversationId/add-member", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.addMemberConversation)
 
-//--- Removemember from group
+//--- Removemember from group -- socket
 chatRoute.delete("/conversation/:conversationId/remove-member", verifyAccessToken, chatAccess.roleAdmin, chatController.removeMemberConversation)
 
-//--- Add admin group
+//--- Add admin group -- socket
 chatRoute.put("/conversation/:conversationId/add-admin", verifyAccessToken, chatAccess.roleAdmin, chatController.addAdminConversation)
 
-//--- Exit group
+//--- Exit group -- socket
 chatRoute.delete("/conversation/:conversationId/exit", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.exitConversationGroup)
 
 

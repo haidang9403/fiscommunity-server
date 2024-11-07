@@ -17,6 +17,12 @@ io.on('connection', (socket) => {
         console.log(`User ${userId} joined room: user_${userId}`);
     });
 
+    // Lắng nghe sự kiện join conversation để người dùng tham gia đoạn chat
+    socket.on('joinConversation', (conversationId) => {
+        socket.join(`conversation_${conversationId}`);
+        console.log(`User joined conversation: ${conversationId}`);
+    });
+
     // Xử lý khi client ngắt kết nối
     socket.on('disconnect', () => {
         console.log('Client disconnected:', socket.id);

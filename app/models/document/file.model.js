@@ -194,6 +194,13 @@ class File {
             where,
             orderBy,
             select,
+            include: {
+                owner: {
+                    include: {
+                        userProfile: true
+                    }
+                }
+            }
         })
     }
 }

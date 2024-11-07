@@ -9,9 +9,265 @@ const Folder = require("../models/document/folder.model");
 const prisma = require("../services/prisma");
 const { deleteFileFromGCS, deleteFolderFromGCS } = require("../utils/googleCloundStorage/delete.util");
 const { response } = require("express");
+const { getStateRelation } = require("../utils/helper.util");
 
 
 const chatController = {
+    // get info all conversation
+    getInfoConversation: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+
+            const conversations = await prisma.conversation.findMany({
+                where: {
+                    user: {
+                        some: {
+                            id: userId
+                        }
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                },
+                orderBy: {
+                    lastMessageAt: "desc"
+                }
+            })
+
+            const conversationRes = await Promise.all(
+                conversations.map(async (conversation) => {
+                    let stateBlock = "NONE";
+                    const otherUser = conversation.user.filter((user) => user.id != userId)
+                    const relation = conversation.isGroup ? ["NONE"] : await getStateRelation(userId, otherUser[0].id)
+
+                    if (relation.includes("BLOCKED") || relation.includes("BLOCKING")) {
+                        return null
+                    }
+
+                    return {
+                        ...conversation,
+                        stateBlock,
+                        otherUser: conversation.isGroup ? otherUser : otherUser[0]
+                    };
+                })
+            );
+
+            const con = conversationRes.filter((e) => e)
+
+            res.status(200).json(con)
+        } catch (error) {
+            console.error(error);
+            next(createError(500, "Error when create conversation"))
+        }
+    },
+    getMessageMedia: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const conversationId = parseInt(req.params.conversationId);
+            // const limit = parseInt(req.query.limit) || 20;
+            // const offset = parseInt(req.query.offset) || 0;
+
+            const messages = await prisma.message.findMany({
+                where: {
+                    conversationId,
+                    type: "MEDIA"
+                },
+                orderBy: {
+                    createdAt: "desc"
+                },
+                // take: limit,
+                // skip: offset
+            })
+
+
+
+            res.status(200).json(messages)
+        } catch (error) {
+            console.error(error);
+            next(createError(500, "Error when create conversation"))
+        }
+    },
+    getMessageFiles: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const conversationId = parseInt(req.params.conversationId);
+            // const limit = parseInt(req.query.limit) || 20;
+            // const offset = parseInt(req.query.offset) || 0;
+
+            const messages = await prisma.message.findMany({
+                where: {
+                    conversationId,
+                    type: "FILE"
+                },
+                orderBy: {
+                    createdAt: "desc"
+                },
+                include: {
+                    file: true
+                }
+                // take: limit,
+                // skip: offset
+            })
+
+            res.status(200).json(messages)
+        } catch (error) {
+            console.error(error);
+            next(createError(500, "Error when create conversation"))
+        }
+    },
+    //---- GET Message CONVERSATION----//
+    getMessages: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const conversationId = parseInt(req.params.conversationId);
+            const limit = parseInt(req.query.limit) || 20;
+            const offset = parseInt(req.query.offset) || 0;
+
+            const messages = await prisma.message.findMany({
+                where: {
+                    conversationId
+                },
+                orderBy: {
+                    createdAt: "desc"
+                },
+                include: {
+                    seens: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    sender: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    file: true,
+                    folder: true,
+                    post: {
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    }
+                },
+                take: limit,
+                skip: offset
+            })
+
+
+
+            res.status(200).json(messages)
+        } catch (error) {
+            console.error(error);
+            next(createError(500, "Error when create conversation"))
+        }
+    },
+    //---- GET ALL CONVERSATION----//
+    getConversation: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+
+            const conversations = await prisma.conversation.findMany({
+                where: {
+                    user: {
+                        some: {
+                            id: userId
+                        }
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    messages: {
+                        include: {
+                            sender: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            seens: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            file: true,
+                            folder: true,
+                            post: {
+                                include: {
+                                    owner: {
+                                        include: {
+                                            userProfile: true
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        orderBy: {
+                            createdAt: "desc"
+                        },
+                        take: 20
+                    },
+                    admins: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                },
+                orderBy: {
+                    lastMessageAt: "desc"
+                }
+            })
+
+            const conversationRes = await Promise.all(
+                conversations.map(async (conversation) => {
+                    let stateBlock = "NONE";
+                    const otherUser = conversation.user.filter((user) => user.id != userId)
+                    const relation = conversation.isGroup ? ["NONE"] : await getStateRelation(userId, otherUser[0].id)
+
+                    if (relation.includes("BLOCKED")) {
+                        stateBlock = "BLOCKED"
+                    }
+
+                    if (relation.includes("BLOCKING")) {
+                        stateBlock = "BLOCKING"
+                    }
+
+
+                    const unSeenMessageCount = await prisma.message.count({
+                        where: {
+                            conversationId: conversation.id,
+                            seens: {
+                                none: {
+                                    id: userId
+                                }
+                            }
+                        }
+                    });
+
+                    return {
+                        ...conversation,
+                        amountUnSeen: unSeenMessageCount,
+                        stateBlock
+                    };
+                })
+            );
+
+            res.status(200).json(conversationRes)
+        } catch (error) {
+            console.error(error);
+            next(createError(500, "Error when create conversation"))
+        }
+    },
     //---- CREATE CONVERSATION WITH ONE PERSON----//
     createConversationOne: async (req, res, next) => {
         try {
@@ -43,11 +299,11 @@ const chatController = {
     //---- CREATE CONVERSATION GROUP----//
     createConversationGroup: async (req, res, next) => {
         try {
-            const userIds = req.body.userIds;
+            let userIds = req.body.userIds;
             const currentUserId = parseInt(req.payload.aud);
             const name = req.body.name;
 
-            if (userIds.length < 3) return next(createError(404, "Ít nhất 3 người để tạo nhóm"))
+            if (userIds.length < 2) return next(createError(400, "Thêm ít nhất 2 người để tạo nhóm"))
 
             for (const userId of userIds) {
                 const user = await prisma.user.findUnique({
@@ -58,6 +314,8 @@ const chatController = {
 
                 if (!user) return next(createError(404, "User not found"))
             }
+
+            userIds.push(currentUserId)
 
             // Tạo cuộc trò chuyện mới
             const conversation = await Conversation.createGroup({
@@ -262,7 +520,7 @@ const chatController = {
     sendTextMessage: async (req, res, next) => {
         try {
             const { conversationId } = req.params
-            const senderId = req.payload.aud;
+            const senderId = parseInt(req.payload.aud);
             const body = req.body.body;
             if (!body) return next(404, "Body message not found")
 
@@ -277,7 +535,52 @@ const chatController = {
 
             const messageSaved = await newMessage.save();
 
-            res.status(200).json(messageSaved);
+            await Conversation.model.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    lastMessageAt: messageSaved.createdAt
+                }
+            })
+
+            const messageRes = await prisma.message.update({
+                where: {
+                    id: messageSaved.id
+                },
+                data: {
+                    seens: {
+                        connect: {
+                            id: senderId
+                        }
+                    }
+                },
+                include: {
+                    sender: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    seens: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    file: true,
+                    folder: true,
+                    post: {
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    }
+                },
+            })
+
+            res.status(200).json(messageRes);
         } catch (e) {
             console.log(e)
             return next(createError(500, "Error when sending message"))
@@ -287,7 +590,7 @@ const chatController = {
     sendMediaMessage: async (req, res, next) => {
         try {
             const { conversationId } = req.params
-            const senderId = req.payload.aud;
+            const senderId = parseInt(req.payload.aud);
 
             const type = TypeMessage.MEDIA;
 
@@ -342,7 +645,52 @@ const chatController = {
             //     }
             // })
 
-            res.status(200).json(messageSaved);
+            await Conversation.model.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    lastMessageAt: messageSaved.createdAt
+                }
+            })
+
+            const messageRes = await prisma.message.update({
+                where: {
+                    id: messageSaved.id
+                },
+                data: {
+                    seens: {
+                        connect: {
+                            id: senderId
+                        }
+                    }
+                },
+                include: {
+                    sender: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    seens: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    file: true,
+                    folder: true,
+                    post: {
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    }
+                },
+            })
+
+            res.status(200).json(messageRes);
         } catch (e) {
             console.log(e)
             return next(createError(500, "Error when sending message"))
@@ -352,7 +700,7 @@ const chatController = {
     sendFileMessage: async (req, res, next) => {
         try {
             const { conversationId } = req.params
-            const senderId = req.payload.aud;
+            const senderId = parseInt(req.payload.aud);
 
             const type = TypeMessage.FILE;
 
@@ -421,11 +769,49 @@ const chatController = {
                         id: parseInt(conversationId)
                     },
                     data: {
-                        totalStorage: parseFloat(conversation.totalStorage) + parseFloat(size)
+                        totalStorage: parseFloat(conversation.totalStorage) + parseFloat(size),
+                        lastMessageAt: messageSaved.createdAt
                     }
                 })
 
-                res.status(200).send(messageSaved);
+                const messageRes = await prisma.message.update({
+                    where: {
+                        id: messageSaved.id
+                    },
+                    data: {
+                        seens: {
+                            connect: {
+                                id: senderId
+                            }
+                        },
+                    },
+                    include: {
+                        sender: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        seens: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        file: true,
+                        folder: true,
+                        post: {
+                            include: {
+                                owner: {
+                                    include: {
+                                        userProfile: true
+                                    }
+                                }
+                            }
+                        }
+                    },
+
+                })
+
+                res.status(200).json(messageRes);
             })
         } catch (e) {
             console.log(e)
@@ -436,7 +822,7 @@ const chatController = {
     sendFolderMessage: async (req, res, next) => {
         try {
             const { conversationId } = req.params
-            const senderId = req.payload.aud;
+            const senderId = parseInt(req.payload.aud);
 
             const type = TypeMessage.FOLDER;
 
@@ -525,7 +911,43 @@ const chatController = {
                     }
                 })
 
-                res.status(200).send(messageSaved);
+                const messageRes = await prisma.message.update({
+                    where: {
+                        id: messageSaved.id
+                    },
+                    data: {
+                        seens: {
+                            connect: {
+                                id: senderId
+                            }
+                        },
+                    },
+                    include: {
+                        sender: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        seens: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        file: true,
+                        folder: true,
+                        post: {
+                            include: {
+                                owner: {
+                                    include: {
+                                        userProfile: true
+                                    }
+                                }
+                            }
+                        }
+                    },
+                })
+
+                res.status(200).json(messageRes);
             })
         } catch (e) {
             console.log(e)
@@ -694,28 +1116,88 @@ const chatController = {
     //---- SEEN MESSAGE ----//
     seenMeesage: async (req, res, next) => {
         try {
-            const messageId = req.params.messageId;
+            const conversationId = req.params.conversationId;
             const userId = req.payload.aud;
 
-            const messageSeen = await Message.model.update({
+            const messages = await Message.model.findMany({
+                where: { conversationId: parseInt(conversationId) }
+            });
+
+            const messageSeen = await Promise.all(
+                messages.map(async (message) => {
+                    return Message.model.update({
+                        where: { id: message.id },
+                        data: {
+                            seens: {
+                                connect: { id: parseInt(userId) }
+                            }
+                        },
+                        include: {
+                            seens: {
+                                include: { userProfile: true }
+                            }
+                        }
+                    });
+                })
+            );
+
+            const conversation = await Conversation.model.findUnique({
                 where: {
-                    id: parseInt(messageId)
+                    id: parseInt(conversationId)
                 },
-                data: {
-                    seens: {
-                        connect: {
-                            id: parseInt(userId)
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    messages: {
+                        include: {
+                            sender: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            seens: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            file: true,
+                            folder: true
+                        },
+                        orderBy: {
+                            createdAt: "desc"
+                        },
+                        take: 20
+                    },
+                    admins: {
+                        include: {
+                            userProfile: true
                         }
                     }
                 },
-                include: {
-                    seens: true
-                }
             })
 
-            if (!messageSeen) return next(createError(404, "Message not found"))
+            let stateBlock = "NONE";
+            const otherUser = conversation.user.filter((user) => user.id != userId)
+            const relation = conversation.isGroup ? ["NONE"] : await getStateRelation(userId, otherUser[0].id)
 
-            res.status(200).json(messageSeen)
+            if (relation.includes("BLOCKED")) {
+                stateBlock = "BLOCKED"
+            }
+
+            if (relation.includes("BLOCKING")) {
+                stateBlock = "BLOCKING"
+            }
+
+            // if (!messageSeen || messageSeen.length ) return next(createError(404, "Message not found"))
+
+            res.status(200).json({
+                ...conversation,
+                amountUnSeen: 0,
+                stateBlock
+            })
         } catch (e) {
             console.log(e)
             next(createError(500, "Error when deleting message"))

@@ -163,6 +163,7 @@ const accessGroup = ({
                 GroupPermission.ADMIN
             ];
 
+
             if (permissionLevels.indexOf(userRole) >= permissionLevels.indexOf(permission)) {
                 return next();
             } else {

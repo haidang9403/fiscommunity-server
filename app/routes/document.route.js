@@ -1,7 +1,7 @@
 const express = require('express');
 const { verifyAccessToken } = require("../utils/jwt.util");
 const { uploadMiddleware } = require('../utils/googleCloundStorage/upload.util');
-const { uploadFile, uploadFolder, deleteFile, deleteFolder, getStructureDocument, getFile, getFolder } = require('../controllers/document.controller');
+const { uploadFile, uploadFolder, deleteFile, deleteFolder, getStructureDocument, getFile, getFolder, getInfoFolder, getFolerUser, getStructure, getStructureDocumentOfUser } = require('../controllers/document.controller');
 
 const documentRoute = express.Router();
 
@@ -20,6 +20,12 @@ documentRoute.put("/document/:userId/:documentId", (req, res) => {
 
 //--------- API Get document -----------//
 documentRoute.get("/document", verifyAccessToken, getStructureDocument)
+documentRoute.get("/document/structure", verifyAccessToken, getStructure)
+documentRoute.get("/document/folder", verifyAccessToken, getFolerUser)
+documentRoute.get("/document/group/:groupId", verifyAccessToken, getStructureDocument)
+documentRoute.get("/document/user/:userId", verifyAccessToken, getStructureDocumentOfUser)
+
+documentRoute.get("/document/info/folder/:folderId", verifyAccessToken, getInfoFolder)
 
 documentRoute.get("/document/file/:fileId", verifyAccessToken, getFile)
 

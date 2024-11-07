@@ -13,6 +13,7 @@ const path = require('path');
 const { UploadDocumentWhere, TypeGroup, TypePrivacy, GroupPermission } = require("@prisma/client");
 const Group = require("../models/groups/group.model");
 const UserAttendGroup = require("../models/groups/user.attend.group.model");
+const { getStateRelation } = require("../utils/helper.util");
 
 
 module.exports = {
@@ -21,7 +22,7 @@ module.exports = {
         try {
             const userId = req.payload.aud;
             const file = req.file;
-            const replace = req.body.replace ?? false;
+            const replace = req.body.replace == 'false' ? false : true;
             let from = req.body.from ?? UploadDocumentWhere.USER;
             const groupId = req.params.groupId;
             const folderId = parseInt(req.body.folderId);
@@ -37,9 +38,14 @@ module.exports = {
                     throw createError(403, "You do not have permission to upload this file");
                 }
 
-                if (folder.from == UploadDocumentWhere.MESSAGE || folder.from == UploadDocumentWhere.GROUP) {
+                if (folder.from == UploadDocumentWhere.MESSAGE) {
                     return next(createError(400, "Folder not valid to upload"))
                 }
+
+                if (folder.from == UploadDocumentWhere.GROUP && !groupId) {
+                    return next(createError(400, "Folder not valid to upload"))
+                }
+
 
                 if (groupId) {
                     if (folder.groupId != groupId) {
@@ -59,11 +65,7 @@ module.exports = {
                 })
 
                 if (group) {
-                    if (group.type == TypeGroup.PUBLIC) {
-                        privacy = TypePrivacy.PUBLIC
-                    } else if (group.type == TypeGroup.PRIVATE) {
-                        privacy = TypePrivacy.PRIVATE_GROUP
-                    }
+                    privacy = TypePrivacy.PRIVATE_GROUP
                     from = UploadDocumentWhere.GROUP
                     destUserFolder = `group-${group.id}/user-${userId}`
                 }
@@ -117,10 +119,11 @@ module.exports = {
         try {
             const userId = req.payload.aud;
             const files = req.files;
-            const replace = req.body.replace ?? false;
+
+            const replace = req.body.replace == 'false' ? false : true;
             const parentFolderId = parseInt(req.body.parentFolderId);
             let from = req.body.from ?? UploadDocumentWhere.USER;
-            const groupId = req.params.groupId;
+            const groupId = req.params.groupId ? parseInt(req.params.groupId) : null;
             let privacy = req.body.privacy;
             if (!files) {
                 return next(400, "No file uploaded.");
@@ -137,11 +140,7 @@ module.exports = {
                 })
 
                 if (group) {
-                    if (group.type == TypeGroup.PUBLIC) {
-                        privacy = TypePrivacy.PUBLIC
-                    } else if (group.type == TypeGroup.PRIVATE) {
-                        privacy = TypePrivacy.PRIVATE_GROUP
-                    }
+                    privacy = TypePrivacy.PRIVATE_GROUP
                     destUserFolder = `group-${group.id}/user-${userId}`
                     from = UploadDocumentWhere.GROUP
                 }
@@ -158,7 +157,11 @@ module.exports = {
                     }
 
 
-                    if (parentFolder.from == UploadDocumentWhere.MESSAGE || parentFolder.from == UploadDocumentWhere.GROUP) {
+                    if (parentFolder.from == UploadDocumentWhere.MESSAGE) {
+                        return next(createError(400, "Folder not valid to upload"))
+                    }
+
+                    if (parentFolder.from == UploadDocumentWhere.GROUP && !groupId) {
                         return next(createError(400, "Folder not valid to upload"))
                     }
 
@@ -179,6 +182,7 @@ module.exports = {
             }
 
             const destFolder = `${destUserFolder}/${fullPathParentFolder ?? ""}${folder}`
+            console.log(replace)
 
             uploadFolderToGCS(files, destFolder, { replace }, async (err, { results, folder }) => {
                 if (err) {
@@ -202,7 +206,8 @@ module.exports = {
                         where: {
                             title: folder.folderName,
                             parentFolderId,
-                            ownerId: parseInt(userId)
+                            ownerId: parseInt(userId),
+                            groupId
                         }
                     })
 
@@ -228,6 +233,8 @@ module.exports = {
 
                         await newFolder.save()
                     } else {
+                        const temp = await newFolder.save();
+
 
                         results.forEach(async (result) => {
                             await prisma.file.create({
@@ -238,16 +245,14 @@ module.exports = {
                                     from,
                                     ownerId: userId,
                                     groupId,
-                                    folderId: newFolder.id
+                                    folderId: temp.id
                                 }
                             })
                         })
-
-                        await newFolder.save();
                     }
 
                 } else {
-                    await newFolder.save();
+                    const temp = await newFolder.save();
 
                     results.forEach(async (result) => {
                         await prisma.file.create({
@@ -258,20 +263,20 @@ module.exports = {
                                 from,
                                 ownerId: userId,
                                 groupId,
-                                folderId: newFolder.id
+                                folderId: temp.id
                             }
                         })
                     })
                 }
 
-
+                const folderSuccess = await prisma.folder.findUnique({
+                    where: {
+                        id: parseInt(newFolder.id)
+                    }
+                })
                 // Trả về URL công khai của file đã tải lên
-                res.status(200).send({
-                    success: true,
-                    message: 'Tải folder lên thành công!',
-                    folder,
-                    results,
-                });
+                res.status(200).send(
+                    folderSuccess);
             })
 
         } catch (e) {
@@ -370,9 +375,9 @@ module.exports = {
 
             const groupId = req.params.groupId;
 
-            if (!groupId && folder.groupId) {
-                return next(createError(404, "Not permission to delete folder"))
-            }
+            // if (groupId && folder.groupId) {
+            //     return next(createError(404, "Not permission to delete folder"))
+            // }
 
             let isAccess = true;
 
@@ -407,7 +412,7 @@ module.exports = {
 
 
             if (!isAccess) {
-                return next(createError(403, "You do not have permission to delete this file"));
+                return next(createError(403, "You do not have permission to delete this folder"));
             }
 
             const pathFolderArray = folder.url.split("/");
@@ -420,6 +425,10 @@ module.exports = {
                     return next(createError(500, "Error when delelte folder"));
                 }
 
+                const currentFolder = new Folder(folder.id);
+
+                await currentFolder.deleteAllFiles(folder.id);
+
                 await Folder.delete(folder.id);
 
                 return res.status(result.statusCode).send({
@@ -428,7 +437,7 @@ module.exports = {
                 });
             })
         } catch (e) {
-            next(e)
+            return next(e)
         }
     },
     // GET STRUCETURE DOCUMENT
@@ -443,16 +452,18 @@ module.exports = {
                 folders = await Folder.getAll({
                     where: {
                         groupId: parseInt(groupId),
+                        from: UploadDocumentWhere.GROUP,
                         parentFolderId: parseInt(folderId) ?? null,
                     },
                     orderBy: {
                         title: "asc"
-                    }
+                    },
                 })
             } else {
                 folders = await Folder.getAll({
                     where: {
                         ownerId: userId,
+                        from: UploadDocumentWhere.USER,
                         parentFolderId: parseInt(folderId) ?? null,
                     },
                     orderBy: {
@@ -465,28 +476,46 @@ module.exports = {
                 return {
                     type: "folder",
                     data: {
-                        ...folder,
-                        size: folder.size.toString()
+                        ...folder
                     },
                 }
             })
 
-            const files = await File.getAll({
-                where: {
-                    ownerId: userId,
-                    folderId: parseInt(folderId) ?? null,
-                }
-            })
+            let files = [];
+            if (groupId) {
+                files = await File.getAll({
+                    where: {
+                        groupId: parseInt(groupId),
+                        from: UploadDocumentWhere.GROUP,
+                        folderId: parseInt(folderId) ?? null,
+                    },
+                    orderBy: {
+                        title: "asc"
+                    },
+                })
+            } else {
+                files = await File.getAll({
+                    where: {
+                        ownerId: userId,
+                        from: UploadDocumentWhere.USER,
+                        folderId: parseInt(folderId) ?? null,
+                    },
+                    orderBy: {
+                        title: "asc"
+                    },
+                })
+            }
+
 
             const fileStructure = files.map(file => {
                 return {
                     type: "file",
                     data: {
-                        ...file,
-                        size: file.size.toString()
+                        ...file
                     }
                 }
             })
+
 
             res.status(200).json([
                 ...folderStructure,
@@ -555,8 +584,6 @@ module.exports = {
             getFileFromGCS(pathFile, async (error, result) => {
                 if (error) return next(createError(500, "Error when get file"));
 
-                console.log(result)
-
                 return res.status(200).json({
                     ...file,
                     size: file.size.toString(),
@@ -573,53 +600,27 @@ module.exports = {
             const folderId = req.params.folderId;
             const userId = req.payload.aud;
 
-            if (!folderId) throw createError(400, "No folder to delete");
+            if (!folderId) throw createError(400, "No folder to download");
 
             const folder = await Folder.get(folderId);
-            if (!folder) throw createError(400, "Folder not exist")
+            if (!folder) throw createError(400, "Folder not exist");
 
             const groupId = req.params.groupId;
-
-            if (!groupId && folder.groupId) {
-                return next(createError(404, "Not permission to delete folder"))
-            }
-
-            let isAccess = true;
-
-            if (folder.ownerId !== userId) {
-                isAccess = false;
-            }
+            let isAccess = folder.ownerId === userId || folder.privacy === TypePrivacy.PUBLIC;
 
             if (groupId) {
-                const group = await Group.model.findUnique({
-                    where: {
-                        id: parseInt(groupId)
-                    }
-                })
-
+                const group = await Group.model.findUnique({ where: { id: parseInt(groupId) } });
                 if (group) {
                     const groupPermission = await prisma.userAttendGroup.findFirst({
-                        where: {
-                            groupId: group.id,
-                            userId: parseInt(userId)
-                        }
-                    })
-
-                    if (folder.groupId != group.id) {
-                        return next(createError(404, "Folder not exist in group"))
-                    }
-
-                    if (groupPermission.permission == GroupPermission.ADMIN) {
+                        where: { groupId: group.id, userId: parseInt(userId) }
+                    });
+                    if (folder.groupId === group.id && groupPermission.permission === GroupPermission.ADMIN) {
                         isAccess = true;
                     }
                 }
             }
 
-
-            if (!isAccess) {
-                return next(createError(403, "You do not have permission to delete this file"));
-            }
-
+            if (!isAccess) return next(createError(403, "You do not have permission to download this file"));
 
             const pathFolderArray = folder.url.split("/");
             pathFolderArray.shift();
@@ -627,7 +628,7 @@ module.exports = {
 
             getFolderFromGCS(pathFolder, (error, result) => {
                 if (error) {
-                    res.status(500).send('Error creating zip file');
+                    res.status(500).send('Error retrieving folder contents');
                     return;
                 }
 
@@ -636,30 +637,315 @@ module.exports = {
                     return;
                 }
 
-                // Tạo archive ZIP
                 const archive = archiver('zip', { zlib: { level: 9 } });
-                const stream = new PassThrough();
+                res.attachment(`${folder.title}_${Date.now()}.zip`);
 
-                const nameFolderZip = folder.title + Date.now() + ".zip";
-                res.attachment(nameFolderZip);
+                archive.on('error', (err) => next(err));
 
-                // Thêm các file vào archive
+                archive.on('close', () => {
+                    console.log('ZIP file created successfully');
+                });
+
+                archive.pipe(res);
+
                 result.fileList.forEach((file) => {
-                    const fileStream = bucket.file(file).createReadStream();
-
-                    const fileName = path.relative(pathFolder, file);
-                    const folderName = folder.title + "/" + fileName;
+                    const fileStream = file.createReadStream();
+                    const fileName = path.relative(pathFolder, file.name);
+                    const folderName = `${folder.title}/${fileName}`;
                     archive.append(fileStream, { name: folderName });
                 });
 
-                archive.pipe(stream);
                 archive.finalize();
-
-
-                stream.pipe(res);
-            });
+            })
         } catch (e) {
             next(e);
         }
-    }
+    },
+    getInfoFolder: async (req, res, next) => {
+        try {
+            const folderId = parseInt(req.params.folderId);
+            const infoFolder = await Folder.getInfoFolder(folderId);
+
+            res.send(infoFolder);
+        } catch (e) {
+            console.log(e)
+            next(createError(500, "Error when get information folder"));
+        }
+    },
+    getFolerUser: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const folders = await prisma.folder.findMany({
+                where: {
+                    ownerId: userId,
+                    from: UploadDocumentWhere.USER
+                },
+                include: {
+                    childrenFolders: true,
+                },
+            });
+            const map = {};
+            const roots = [];
+
+            folders.forEach(folder => {
+                map[folder.id] = { ...folder, children: [] };
+            });
+
+            folders.forEach(folder => {
+                if (folder.parentFolderId) {
+
+                    map[folder.parentFolderId].children.push(map[folder.id]);
+                } else {
+
+                    roots.push(map[folder.id]);
+                }
+            });
+
+            res.send({
+                folders: roots
+            })
+        } catch (e) {
+            console.log(e);
+            next(createError(500))
+        }
+    },
+    getFolerGroup: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const groupId = parseInt(req.params.groupId);
+            const folders = await prisma.folder.findMany({
+                where: {
+                    groupId: groupId,
+                    from: UploadDocumentWhere.GROUP
+                },
+                include: {
+                    childrenFolders: true,
+                },
+            });
+            const map = {};
+            const roots = [];
+
+            folders.forEach(folder => {
+                map[folder.id] = { ...folder, children: [] };
+            });
+
+            folders.forEach(folder => {
+                if (folder.parentFolderId) {
+
+                    map[folder.parentFolderId].children.push(map[folder.id]);
+                } else {
+
+                    roots.push(map[folder.id]);
+                }
+            });
+
+            res.send({
+                folders: roots
+            })
+        } catch (e) {
+            console.log(e);
+            next(createError(500))
+        }
+    },
+    getStructure: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const { folderIds, fileIds } = req.query;
+
+            const folderIdsArray = folderIds?.split(",");
+            const fileIdsArray = fileIds?.split(",");
+
+            const groupId = req.params.groupId;
+
+            let folders = [];
+            if (folderIdsArray?.length > 0) {
+                if (groupId) {
+                    folders = await Folder.model.findMany({
+                        where: {
+                            groupId: parseInt(groupId),
+                            id: {
+                                in: folderIdsArray.map(Number)
+                            },
+                            from: UploadDocumentWhere.GROUP,
+                        },
+                        orderBy: {
+                            title: "asc"
+                        },
+                    });
+                } else {
+                    folders = await Folder.model.findMany({
+                        where: {
+                            from: UploadDocumentWhere.USER,
+                            id: {
+                                in: folderIdsArray.map(Number)
+                            },
+                        },
+                        orderBy: {
+                            title: "asc"
+                        }
+                    });
+                }
+            }
+
+            const folderStructure = folders.map(folder => {
+                return {
+                    type: "folder",
+                    data: {
+                        ...folder
+                    },
+                };
+            });
+
+            let files = [];
+            if (fileIdsArray?.length > 0) {
+                if (groupId) {
+                    files = await File.model.findMany({
+                        where: {
+                            groupId: parseInt(groupId),
+                            from: UploadDocumentWhere.GROUP,
+                            id: {
+                                in: fileIdsArray.map(Number)
+                            }
+                        },
+                        orderBy: {
+                            title: "asc"
+                        },
+                    });
+                } else {
+                    files = await File.model.findMany({
+                        where: {
+                            from: UploadDocumentWhere.USER,
+                            id: {
+                                in: fileIdsArray.map(Number)
+                            }
+                        },
+                        orderBy: {
+                            title: "asc"
+                        },
+                    });
+                }
+            }
+
+            const fileStructure = files.map(file => {
+                return {
+                    type: "file",
+                    data: {
+                        ...file
+                    }
+                };
+            });
+
+            res.status(200).json([
+                ...folderStructure,
+                ...fileStructure
+            ]);
+        } catch (e) {
+            console.log(e);
+            next(createError(500));
+        }
+    },
+    // GET STRUCETURE DOCUMENT
+    getStructureDocumentOfUser: async (req, res, next) => {
+        try {
+            const userOwnId = parseInt(req.payload.aud);
+            const userId = parseInt(req.params.userId)
+            const folderId = req.query.folder;
+            const groupId = req.params.groupId;
+
+            const relation = await getStateRelation(userOwnId, userId)
+
+            if (relation.includes("BLOCKED") || relation.includes("BLOCKING")) return next(createError(403))
+
+            const privacies = [TypePrivacy.PUBLIC];
+
+            if (relation.includes("FRIEND")) privacies.push(TypePrivacy.FRIENDS)
+
+            let folders = [];
+            if (groupId) {
+                folders = await Folder.getAll({
+                    where: {
+                        groupId: parseInt(groupId),
+                        from: UploadDocumentWhere.GROUP,
+                        parentFolderId: parseInt(folderId) ?? null,
+                    },
+                    orderBy: {
+                        title: "asc"
+                    },
+                })
+            } else {
+                folders = await prisma.folder.findMany({
+                    where: {
+                        ownerId: userId,
+                        from: UploadDocumentWhere.USER,
+                        parentFolderId: parseInt(folderId) ?? null,
+                        privacy: {
+                            in: privacies
+                        }
+                    },
+                    orderBy: {
+                        title: "asc"
+                    }
+                })
+            }
+
+            const folderStructure = folders.map(folder => {
+                return {
+                    type: "folder",
+                    data: {
+                        ...folder
+                    },
+                }
+            })
+
+            let files = [];
+            if (groupId) {
+                files = await File.getAll({
+                    where: {
+                        groupId: parseInt(groupId),
+                        from: UploadDocumentWhere.GROUP,
+                        folderId: parseInt(folderId) ?? null,
+
+                    },
+                    orderBy: {
+                        title: "asc"
+                    },
+                })
+            } else {
+                files = await File.getAll({
+                    where: {
+                        ownerId: userId,
+                        from: UploadDocumentWhere.USER,
+                        folderId: parseInt(folderId) ?? null,
+                        privacy: {
+                            in: privacies
+                        }
+                    },
+                    orderBy: {
+                        title: "asc"
+                    },
+                })
+            }
+
+
+            const fileStructure = files.map(file => {
+                return {
+                    type: "file",
+                    data: {
+                        ...file
+                    }
+                }
+            })
+
+
+            res.status(200).json([
+                ...folderStructure,
+                ...fileStructure
+            ])
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+
 }
+

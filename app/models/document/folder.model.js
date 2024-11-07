@@ -68,13 +68,32 @@ class Folder {
 
     async deleteAllFiles() {
         if (this.id) {
+            // Xóa tất cả các tập tin trong thư mục hiện tại
             await prisma.file.deleteMany({
                 where: {
-                    folderId: this.id
+                    folderId: parseInt(this.id)
                 }
-            })
+            });
+
+            // Tìm tất cả các thư mục con
+            const subFolders = await prisma.folder.findMany({
+                where: {
+                    parentFolderId: parseInt(this.id)
+                }
+            });
+
+            for (const subFolder of subFolders) {
+                const folderInstance = new Folder(subFolder.id);
+                await folderInstance.deleteAllFiles();
+                await prisma.folder.delete({
+                    where: {
+                        id: subFolder.id
+                    }
+                });
+            }
         }
     }
+
 
     async save() {
         let folder;
@@ -175,6 +194,43 @@ class Folder {
         return fullPath;  // Trả về đường dẫn đầy đủ
     }
 
+    static async getInfoFolder(id) {
+        let folder = {};
+        let parents = [];
+        let currentFolder = await prisma.folder.findUnique({
+            where: { id: parseInt(id) },
+            include: {
+                parentFolder: true
+            }
+        });
+
+        if (!currentFolder) return null;
+
+        folder.data = currentFolder;
+        folder.type = "folder";
+
+        while (currentFolder && currentFolder.parentFolderId) {
+            const parentFolder = await prisma.folder.findUnique({
+                where: { id: currentFolder.parentFolderId },
+                include: {
+                    parentFolder: true
+                }
+            });
+
+            if (parentFolder) {
+                parents.push(parentFolder);
+                currentFolder = parentFolder;
+            } else {
+                break;
+            }
+        }
+
+        return {
+            folder: folder.data,
+            parents: parents.reverse()
+        };
+    }
+
     static async delete(id) {
         if (id) {
             const folderDeleted = await prisma.folder.delete({
@@ -225,6 +281,13 @@ class Folder {
             where,
             orderBy,
             select,
+            include: {
+                owner: {
+                    include: {
+                        userProfile: true
+                    }
+                }
+            }
         })
     }
 }

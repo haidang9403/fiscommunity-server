@@ -1,6 +1,8 @@
 const JWT = require("./jwt.util");
 const bcrypt = require("bcrypt");
-const prisma = require("../services/prisma")
+const prisma = require("../services/prisma");
+const { FriendRequestStatus, GroupPermission, StateAttendGroup } = require("@prisma/client");
+const { parse } = require("dotenv");
 
 const getInfoUser = (user) => {
     return {
@@ -62,9 +64,121 @@ function cleanData(data) {
     );
 }
 
+const getStateRelation = async (userCurrentId, userTargetId) => {
+    try {
+        if (userCurrentId == userTargetId) return ["OWN"]
+        const relation = await prisma.userRelation.findFirst({
+            where: {
+                userSendId: parseInt(userCurrentId),
+                userReciveId: parseInt(userTargetId)
+            }
+        })
+
+        let relations = []
+
+        if (relation) {
+            if (relation.isBlock) {
+                return ["BLOCKING"]
+            }
+
+            if (relation.isFriend) {
+                relations.push("FRIEND")
+            }
+
+            if (relation.friendRequestStatus == FriendRequestStatus.PENDING && !relation.isFriend) {
+                relations.push("PENDING")
+            }
+
+            if (relation.isFollow) {
+                relations.push("FOLLOWING")
+            }
+        }
+
+        const relationReverse = await prisma.userRelation.findFirst({
+            where: {
+                userSendId: parseInt(userTargetId),
+                userReciveId: parseInt(userCurrentId)
+            }
+        })
+
+        if (relationReverse) {
+            if (relationReverse.isBlock) {
+                return ["BLOCKED"]
+            }
+
+            if (relationReverse.isFriend) {
+                if (!relations.includes("FRIEND")) {
+                    relations.push("FRIEND")
+                }
+            }
+
+            if (relationReverse.friendRequestStatus == FriendRequestStatus.PENDING && !relationReverse.isFriend) {
+                relations.push("WAITING")
+            }
+
+            if (relationReverse.isFollow) {
+                relations.push("FOLLOWED")
+            }
+        }
+
+        if (relations.length == 0) {
+            relations.push("NONE")
+        }
+
+        return relations
+    } catch (e) {
+        console.log(e)
+    }
+}
+
+const getPermissionGroup = async (userId, groupId) => {
+    const group = await prisma.group.findUnique({
+        where: {
+            id: parseInt(groupId)
+        },
+        include: {
+            users: {
+                include: {
+                    user: true
+                }
+            }
+        }
+    })
+
+    const userInGroup = group.users.find(userGroup => userGroup.user.id == userId)
+
+    const permission = userInGroup?.permission;
+
+    return permission || GroupPermission.NONE
+}
+
+const getStateInGroup = async (userId, groupId) => {
+    const group = await prisma.group.findUnique({
+        where: {
+            id: parseInt(groupId)
+        },
+        include: {
+            users: {
+                include: {
+                    user: true
+                }
+            }
+        }
+    })
+
+    const userInGroup = group.users.find(userGroup => userGroup.user.id == userId)
+
+    const state = userInGroup?.state;
+
+    return state || StateAttendGroup.NONE
+}
+
 module.exports = {
     getInfoUser,
     signToken,
     getRequestProfileUser,
-    cleanData
+    cleanData,
+    getStateRelation,
+    getPermissionGroup,
+    getStateInGroup
 }

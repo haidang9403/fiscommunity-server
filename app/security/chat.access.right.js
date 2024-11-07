@@ -2,6 +2,7 @@ const createError = require("http-errors");
 const Conversation = require("../models/chat/conversation.model");
 const Message = require("../models/chat/message.model");
 const UserRelation = require("../models/users/user.relation.model");
+const prisma = require("../services/prisma");
 
 const chatAccess = {
     //------- CHECK VALID CONVERSATION ------//
@@ -11,9 +12,9 @@ const chatAccess = {
             const userId = req.payload.aud;
             if (!conversationId) return next(createError(404, "Conversation params not found"))
 
-            const conversation = await Conversation.model.findUnique({
+            const conversation = await prisma.conversation.findUnique({
                 where: {
-                    id: parseInt(conversationId),
+                    id: parseInt(conversationId)
                 },
                 include: {
                     user: true,
@@ -172,7 +173,6 @@ const chatAccess = {
             const conversation = await Conversation.model.findUnique({
                 where: {
                     id: parseInt(conversationId),
-                    isGroup: false
                 },
                 include: {
                     user: true

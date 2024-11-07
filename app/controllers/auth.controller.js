@@ -54,7 +54,7 @@ const authController = {
             });
 
             if (existUser) {
-                return res.status(400).send({ username: "Tài khoản đã tồn tại trên hệ thống" });
+                return res.status(400).send({ email: "Tài khoản đã tồn tại trên hệ thống" });
             }
 
             // HASH PASSWORD

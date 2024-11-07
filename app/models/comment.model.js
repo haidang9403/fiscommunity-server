@@ -74,6 +74,13 @@ class Comment {
                 include: {
                     reply: true,
                     post: true,
+                    replies: true,
+                    userLikes: true,
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
                 }
             })
         }
@@ -95,7 +102,7 @@ class Comment {
             const userLiked = comment.userLikes.some(user => parseInt(userId) == user.id)
 
             if (userLiked) {
-                return await prisma.comment.update({
+                await prisma.comment.update({
                     where: {
                         id: parseInt(commentId),
                     },
@@ -111,7 +118,7 @@ class Comment {
                     }
                 })
             } else {
-                return await prisma.comment.update({
+                await prisma.comment.update({
                     where: {
                         id: parseInt(commentId),
                     },
@@ -127,6 +134,8 @@ class Comment {
                     }
                 })
             }
+
+            return !userLiked;
         } else return null;
     }
 }

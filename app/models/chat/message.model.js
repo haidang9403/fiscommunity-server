@@ -58,10 +58,10 @@ class Message {
                 }
                 break;
             case TypeMessage.POST:
-                if (!this.folderId) throw Error("Post id is invalid")
+                if (!this.postId) throw Error("Post id is invalid")
 
                 var postExsits = await prisma.post.findUnique({
-                    where: { id: this.folderId },
+                    where: { id: this.postId },
                 });
 
                 if (!postExsits) throw new Error("Post does not exist");
@@ -78,6 +78,19 @@ class Message {
             message = await prisma.message.update({
                 where: { id: this.id },
                 data: dataUpdate,
+                include: {
+                    file: true,
+                    folder: true,
+                    post: {
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    }
+                }
             });
         } else {
             message = await prisma.message.create({
@@ -94,6 +107,19 @@ class Message {
                         }
                     },
                 },
+                include: {
+                    file: true,
+                    folder: true,
+                    post: {
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    }
+                }
             });
         }
 

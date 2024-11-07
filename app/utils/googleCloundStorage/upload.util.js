@@ -91,6 +91,7 @@ const uploadFolderToGCS = async (files, destFolder, options = { replace: false }
 
     if (!options.replace) {
         destFolder = await getUniqueFolderName(destFolder);
+        console.log(destFolder)
     } else {
         // Nếu thay thế, xóa tất cả các file trong thư mục cũ trước khi tải lên mới
         const [existingFiles] = await bucket.getFiles({ prefix: destFolder });

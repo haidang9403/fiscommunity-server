@@ -15,7 +15,7 @@ module.exports = {
 
             const secret = config.jwt.access_key;
             const options = {
-                expiresIn: '1y'
+                expiresIn: '30m'
             }
 
             JWT.sign(payload, secret, options, (err, token) => {
@@ -73,24 +73,26 @@ module.exports = {
         const token = req.cookies.refreshToken;
         JWT.verify(token, config.jwt.refresh_key, async (err, payload) => {
             if (err) return next(createError(401, err.message));
-            const result = await prisma.user.findUnique({
-                select: {
-                    refreshToken: true
-                },
-                where: {
-                    id: payload.aud
-                }
-            });
+            req.payload = payload;
+            next()
+            // const result = await prisma.user.findUnique({
+            //     select: {
+            //         refreshToken: true
+            //     },
+            //     where: {
+            //         id: payload.aud
+            //     }
+            // });
 
-            const isAuthRefreshToken = await bcrypt.compare(token, result.refreshToken);
+            // const isAuthRefreshToken = await bcrypt.compare(token, result.refreshToken);
 
-            if (isAuthRefreshToken) {
-                req.payload = payload;
-                next()
-            }
-            else {
-                next(createError(401, "Invalid refreshToken"))
-            }
+            // if (isAuthRefreshToken) {
+            //     req.payload = payload;
+            //     next()
+            // }
+            // else {
+            //     next(createError(401, "Invalid refreshToken"))
+            // }
 
         })
     },

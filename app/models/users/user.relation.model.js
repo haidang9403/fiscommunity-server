@@ -29,20 +29,31 @@ class UserRelation {
         if (existingRelation && !isAddedFriend) {
             // Unblock
             if (this.isBlock === false && existingRelation.isBlock === true) {
-                await prisma.userRelation.deleteMany({
+                const isBlocked = await prisma.userRelation.findFirst({
                     where: {
-                        OR: [
-                            {
-                                userReciveId: this.userReciveId,
-                                userSendId: this.userSendId
-                            },
-                            {
-                                userReciveId: this.userSendId,
-                                userSendId: this.userReciveId
-                            }
-                        ]
+                        userReciveId: parseInt(this.userSendId),
+                        userSendId: parseInt(this.userReciveId),
+                        isBlock: true
                     }
-                })
+                });
+                if (isBlocked) {
+                    return null;
+                } else {
+                    await prisma.userRelation.deleteMany({
+                        where: {
+                            OR: [
+                                {
+                                    userReciveId: this.userReciveId,
+                                    userSendId: this.userSendId
+                                },
+                                {
+                                    userReciveId: this.userSendId,
+                                    userSendId: this.userReciveId
+                                }
+                            ]
+                        }
+                    })
+                }
 
                 return true;
             }

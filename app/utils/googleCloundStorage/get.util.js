@@ -27,30 +27,12 @@ const getFolderFromGCS = async (folderPath, callback) => {
             return;
         }
 
-        // Tạo archive ZIP
-        const archive = archiver('zip', { zlib: { level: 9 } });
-        const stream = new PassThrough();
-
-        // Xử lý kết quả từ archive
-        const fileList = [];
-        // Thêm các file vào archive
-        for (const file of files) {
-            const fileStream = file.createReadStream();
-            archive.append(fileStream, { name: file.name });
-        }
-        archive.on('entry', (entry) => fileList.push(entry.name));
-        archive.on('error', (err) => callback(err, null));
-        archive.on('finish', () => callback(null, { fileList }));
-
-        archive.pipe(stream);
-
-
-        archive.finalize();
-
+        const fileList = files;
+        callback(null, { fileList });
     } catch (e) {
-        callback(e, null)
+        callback(e, null);
     }
-}
+};
 
 module.exports = {
     getFileFromGCS,
