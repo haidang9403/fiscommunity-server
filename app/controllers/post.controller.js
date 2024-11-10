@@ -124,7 +124,12 @@ const postController = {
                         {
                             from: UploadPostWhere.USER,
                             ownerId: { in: [...sendIds, ...reciveIds] }
-                        }
+                        }, {
+                            privacy: "PUBLIC",
+                            ownerId: {
+                                not: userId
+                            }
+                        },
                     ]
                 },
                 include: {
@@ -942,6 +947,32 @@ const postController = {
                 userId
             })
 
+            if (post.ownerId != userId) {
+
+                const io = req.app.get("socketio");
+
+                const notification = await prisma.notify.create({
+                    data: {
+                        link: "postId=" + post.id,
+                        message: "đã thích bài viết của bạn",
+                        type: "LIKE_POST",
+                        userId: post.ownerId,
+                        userSendId: parseInt(userId)
+                    },
+                    include: {
+                        userSend: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        groupSend: true
+                    }
+                })
+
+                io.to(`user_${post.ownerId}`).emit('newNotification', notification)
+            }
+
+
             res.send(postLiked)
         } catch (e) {
             console.log(e)
@@ -977,6 +1008,28 @@ const postController = {
             const postShareSaved = await postShare.save();
 
             await Post.share({ postId, userId });
+
+            const io = req.app.get("socketio");
+
+            const notification = await prisma.notify.create({
+                data: {
+                    link: "postId=" + post.id,
+                    message: "đã chia sẻ bài đăng của bạn",
+                    type: "SHARE_POST",
+                    userId: post.ownerId,
+                    userSendId: parseInt(userId)
+                },
+                include: {
+                    userSend: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    groupSend: true
+                }
+            })
+
+            io.to(`user_${post.ownerId}`).emit('newNotification', notification)
 
             res.status(200).json(postShareSaved)
         } catch (e) {
@@ -1058,6 +1111,8 @@ const postController = {
                 },
             })
 
+
+
             res.status(200).json(messageRes);
 
         } catch (e) {
@@ -1094,6 +1149,32 @@ const postController = {
             const commentSaved = await comment.save();
 
             await Post.comment({ postId });
+
+            if (userId != post.ownerId) {
+                const io = req.app.get("socketio");
+
+                const notification = await prisma.notify.create({
+                    data: {
+                        link: "postId=" + post.id,
+                        message: "đã bình luận về bài đăng của bạn",
+                        type: "COMMENT_POST",
+                        userId: post.ownerId,
+                        userSendId: parseInt(userId)
+                    },
+                    include: {
+                        userSend: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        groupSend: true
+                    }
+                })
+
+                io.to(`user_${post.ownerId}`).emit('newNotification', notification)
+
+            }
+
 
             res.send(commentSaved)
         } catch (e) {
@@ -1192,6 +1273,32 @@ const postController = {
 
             await Post.comment({ postId });
 
+            if (userId != post.ownerId) {
+                const io = req.app.get("socketio");
+
+                const notification = await prisma.notify.create({
+                    data: {
+                        link: "postId=" + comment.postId,
+                        message: "đã trả lời bình luận của bạn trong một bài đăng",
+                        type: "REPLY_COMMENT",
+                        userId: comment.userId,
+                        userSendId: parseInt(userId)
+                    },
+                    include: {
+                        userSend: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        groupSend: true
+                    }
+                })
+
+                io.to(`user_${comment.userId}`).emit('newNotification', notification)
+
+            }
+
+
             res.send(commentSaved)
         } catch (e) {
             console.log(e)
@@ -1219,6 +1326,31 @@ const postController = {
                 commentId: parseInt(commentId),
                 userId: parseInt(userId)
             })
+
+            if (userId != comment.userId) {
+                const io = req.app.get("socketio");
+
+                const notification = await prisma.notify.create({
+                    data: {
+                        link: "postId=" + comment.postId,
+                        message: "đã thích bình luận của bạn trong một bài đăng",
+                        type: "LIKE_COMMENT",
+                        userId: comment.userId,
+                        userSendId: parseInt(userId)
+                    },
+                    include: {
+                        userSend: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        groupSend: true
+                    }
+                })
+
+                io.to(`user_${comment.userId}`).emit('newNotification', notification)
+            }
+
 
             res.status(200).json(commentLiked)
         } catch (e) {

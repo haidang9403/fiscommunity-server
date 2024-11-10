@@ -53,6 +53,9 @@ userRoute.get("/user/friend/:userId", verifyAccessToken, userController.getFrien
 userRoute.get("/user/following/:userId", verifyAccessToken, userController.getFollowingUser)
 userRoute.get("/user/follower/:userId", verifyAccessToken, userController.getFollowerUser)
 
+userRoute.get("/notification", verifyAccessToken, userController.getAllNotification)
+userRoute.post("/notification/:notificationId", verifyAccessToken, userController.readNotication)
+
 userRoute.get("/user/follow", verifyAccessToken, (req, res) => {
     res.send("Get all follower")
 })

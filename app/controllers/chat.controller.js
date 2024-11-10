@@ -290,6 +290,10 @@ const chatController = {
 
             const savedConversation = await conversation.save();
 
+            const io = req.app.get('socketio');
+
+            io.to(`user_${userId}`).emit('newConversation', savedConversation)
+
             res.status(200).json(savedConversation);
         } catch (error) {
             console.error(error);
@@ -580,7 +584,27 @@ const chatController = {
                 },
             })
 
-            res.status(200).json(messageRes);
+            const io = req.app.get('socketio');
+
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                include: {
+                    user: true
+                }
+            })
+
+            conversation.user.forEach((user) => {
+                // if (user.id != senderId) {
+                io.to(`user_${user.id}`).emit('sendTextMessage', { message: messageRes })
+                // } else {
+                //     io.to(`user_${user.id}`.)
+                // }
+            })
+
+
+            res.status(200).json(true);
         } catch (e) {
             console.log(e)
             return next(createError(500, "Error when sending message"))
@@ -690,7 +714,26 @@ const chatController = {
                 },
             })
 
-            res.status(200).json(messageRes);
+            const io = req.app.get('socketio');
+
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                include: {
+                    user: true
+                }
+            })
+
+            conversation.user.forEach((user) => {
+                // if (user.id != senderId) {
+                io.to(`user_${user.id}`).emit('sendTextMessage', { message: messageRes })
+                // } else {
+                //     io.to(`user_${user.id}`.)
+                // }
+            })
+
+            res.status(200).json(true);
         } catch (e) {
             console.log(e)
             return next(createError(500, "Error when sending message"))
@@ -811,7 +854,26 @@ const chatController = {
 
                 })
 
-                res.status(200).json(messageRes);
+                const io = req.app.get('socketio');
+
+                const conversationNew = await prisma.conversation.findUnique({
+                    where: {
+                        id: parseInt(conversationId)
+                    },
+                    include: {
+                        user: true
+                    }
+                })
+
+                conversationNew.user.forEach((user) => {
+                    // if (user.id != senderId) {
+                    io.to(`user_${user.id}`).emit('sendTextMessage', { message: messageRes })
+                    // } else {
+                    //     io.to(`user_${user.id}`.)
+                    // }
+                })
+
+                res.status(200).json(true);
             })
         } catch (e) {
             console.log(e)
@@ -1164,7 +1226,16 @@ const chatController = {
                                 }
                             },
                             file: true,
-                            folder: true
+                            folder: true,
+                            post: {
+                                include: {
+                                    owner: {
+                                        include: {
+                                            userProfile: true
+                                        }
+                                    }
+                                }
+                            }
                         },
                         orderBy: {
                             createdAt: "desc"
@@ -1191,7 +1262,21 @@ const chatController = {
                 stateBlock = "BLOCKING"
             }
 
+            const userEmit = await prisma.user.findUnique({
+                where: {
+                    id: parseInt(userId)
+                },
+                include: {
+                    userProfile: true
+                }
+            })
+
             // if (!messageSeen || messageSeen.length ) return next(createError(404, "Message not found"))
+            const io = req.app.get('socketio');
+
+            otherUser.forEach((other) => {
+                io.to(`user_${other.id}`).emit("seenMessage", userEmit)
+            })
 
             res.status(200).json({
                 ...conversation,

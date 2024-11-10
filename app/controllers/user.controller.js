@@ -78,6 +78,75 @@ const getStateRelation = async (userCurrentId, userTargetId) => {
 }
 
 module.exports = {
+    readNotication: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+            const notificationId = parseInt(req.params.notificationId);
+
+            const notification = await prisma.notify.update({
+                where: {
+                    id: notificationId
+                },
+                data: {
+                    read: true
+                },
+                include: {
+                    groupSend: true,
+                    userSend: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                }
+            })
+
+            if (notification.type == "ACCEPT_FRIEND" || notification.type == "ADD_FRIEND") {
+                await prisma.notify.delete({
+                    where: {
+                        id: notification.id
+                    }
+                })
+            }
+
+            const io = req.app.get('socketio');
+
+
+            io.to(`user_${userId}`).emit("readNotification", notification)
+
+            res.status(200).json(notification)
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+    //--------- GET NOTIFICATION LIST ----------//
+    getAllNotification: async (req, res, next) => {
+        try {
+            const userId = parseInt(req.payload.aud);
+
+            const notifications = await prisma.notify.findMany({
+                where: {
+                    userId
+                },
+                include: {
+                    groupSend: true,
+                    userSend: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                },
+                orderBy: {
+                    createdAt: "desc"
+                }
+            })
+
+            res.status(200).json(notifications)
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
     //--------- GET BLOCKING LIST ----------//
     getBlockingUser: async (req, res, next) => {
         try {
@@ -563,13 +632,33 @@ module.exports = {
             //     type: TypeNotify.ADD_FRIEND
             // })
 
+            const notify = await prisma.notify.create({
+                data: {
+                    link: "",
+                    message: "đã gửi lời mời kết bạn",
+                    type: "ADD_FRIEND",
+                    userId: userReciveId,
+                    userSendId: userSendId,
+                },
+                include: {
+                    userSend: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    groupSend: true
+                }
+            })
+
             const io = req.app.get("socketio")
 
-            // io.to(`user_${userReciveId}`).emit('newNotification', notify)
+            io.to(`user_${userReciveId}`).emit('newNotification', notify)
 
-            res.status(200).json({
-                relation: result
-            });
+            const relationRecived = await getStateRelation(userReciveId, userSendId);
+
+            io.to(`user_${userReciveId}`).emit('sendRelation', relationRecived)
+
+            res.status(200).json(result);
         } catch (e) {
             console.log(e);
             next(createError(500, "Error when send inviting addfriend"));
@@ -578,8 +667,8 @@ module.exports = {
     //------------- REMOVE INVITE ADDING ---------//
     removeInvite: async (req, res, next) => {
         try {
-            const userReciveId = req.params.reciveId;
-            const userSendId = req.payload.aud;
+            const userReciveId = parseInt(req.params.reciveId);
+            const userSendId = parseInt(req.payload.aud);
             const friendRequestStatus = 'NONE';
 
             const isValidReciveUser = await User.isValidUser(userReciveId);
@@ -606,13 +695,21 @@ module.exports = {
 
             const result = await getStateRelation(userSendId, userReciveId);
 
+            await prisma.notify.deleteMany({
+                where: {
+                    userId: userReciveId,
+                    userSendId: userSendId,
+                    type: "ADD_FRIEND"
+                }
+            })
+            const io = req.app.get("socketio")
 
-            // socket to reciveUser
+            const relationRecived = await getStateRelation(userReciveId, userSendId);
+
+            io.to(`user_${userReciveId}`).emit('sendRelation', relationRecived)
 
 
-            res.status(200).json({
-                relation: result
-            });
+            res.status(200).json(result);
         } catch (e) {
             console.log(e);
             next(createError(500, "Error when remove invite"));
@@ -663,8 +760,39 @@ module.exports = {
                 await conversation.save();
             }
 
+            await prisma.notify.deleteMany({
+                where: {
+                    userId: userReciveId,
+                    userSendId: userSendId,
+                    type: "ADD_FRIEND"
+                }
+            })
 
-            // Notify send user
+            const notify = await prisma.notify.create({
+                data: {
+                    link: "",
+                    message: "đã chấp nhận lời mời kết bạn",
+                    type: "ACCEPT_FRIEND",
+                    userId: userSendId,
+                    userSendId: userReciveId,
+                },
+                include: {
+                    userSend: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    groupSend: true
+                }
+            })
+
+            const io = req.app.get("socketio")
+
+            io.to(`user_${userSendId}`).emit('newNotification', notify)
+
+            const relationRecived = await getStateRelation(userSendId, userReciveId);
+
+            io.to(`user_${userSendId}`).emit('sendRelation', relationRecived)
 
             res.status(200).json(result);
         } catch (e) {
@@ -675,8 +803,8 @@ module.exports = {
     //----------- NOT ACCEPT ---------//
     denyUser: async (req, res, next) => {
         try {
-            const userSendId = req.params.senderId;
-            const userReciveId = req.payload.aud;
+            const userSendId = parseInt(req.params.senderId);
+            const userReciveId = parseInt(req.payload.aud);
             const friendRequestStatus = 'DELETED';
             const isFriend = false;
 
@@ -703,7 +831,20 @@ module.exports = {
 
             const result = await getStateRelation(userReciveId, userSendId);
 
-            // Notify send user
+            await prisma.notify.deleteMany({
+                where: {
+                    userId: userReciveId,
+                    userSendId: userSendId,
+                    type: "ADD_FRIEND"
+                }
+            })
+
+            const io = req.app.get("socketio")
+
+
+            const relationRecived = await getStateRelation(userSendId, userReciveId);
+
+            io.to(`user_${userSendId}`).emit('sendRelation', relationRecived)
 
             res.status(200).json(result);
         } catch (e) {
@@ -743,6 +884,11 @@ module.exports = {
             const result = await getStateRelation(userSendId, userReciveId);
 
             // Notify send user
+            const io = req.app.get("socketio")
+
+            const relationRecived = await getStateRelation(userReciveId, userSendId);
+
+            io.to(`user_${userReciveId}`).emit('sendRelation', relationRecived)
 
             res.status(200).json(result);
         } catch (e) {
@@ -784,8 +930,8 @@ module.exports = {
     //----------- BLOCK USER ---------//
     blockUser: async (req, res, next) => {
         try {
-            const userSendId = req.payload.aud;
-            const userReciveId = req.params.reciveId;
+            const userSendId = parseInt(req.payload.aud);
+            const userReciveId = parseInt(req.params.reciveId);
             const isBlock = req.body.isBlock;
 
             const isValidReciveUser = await User.isValidUser(userReciveId);
@@ -800,6 +946,27 @@ module.exports = {
             }
 
             const result = await getStateRelation(userSendId, userReciveId);
+
+            const conversation = await prisma.conversation.findFirst({
+                where: {
+                    isGroup: false,
+                    user: {
+                        every: {
+                            id: {
+                                in: [userSendId, userReciveId]
+                            }
+                        }
+                    }
+                }
+            })
+
+            const io = req.app.get('socketio');
+
+            io.to(`user_${userReciveId}`).emit('blockUser', { conversation, stateBlock: isBlock ? "BLOCKED" : "NONE" })
+
+            const relationRecived = await getStateRelation(userReciveId, userSendId);
+
+            io.to(`user_${userReciveId}`).emit('sendRelation', relationRecived)
 
             res.status(200).json(result);
         } catch (e) {

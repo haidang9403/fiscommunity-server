@@ -347,19 +347,29 @@ module.exports = {
             const pathFile = pathFileArray.join("/");
 
             deleteFileFromGCS(pathFile, async (error, result) => {
-                if (error) {
-                    return next(createError(500, "Error when delelte file"));
+                try {
+                    if (error) {
+                        // Trả lỗi thông qua next nếu có lỗi với GCS
+                        return next(createError(500, "Error when deleting file"));
+                    }
+
+                    // Tiến hành xóa file từ cơ sở dữ liệu
+                    await File.delete(file.id);
+
+                    // Gửi phản hồi thành công sau khi xóa file thành công
+                    return res.status(result.statusCode).send({
+                        success: result.success,
+                        message: result.message,
+                    });
+                } catch (err) {
+                    // Nếu có lỗi trong quá trình xóa file từ cơ sở dữ liệu, trả lỗi
+                    console.log(err);
+                    return next(createError(500, "Error when deleting file from database"));
                 }
-
-                await File.delete(file.id);
-
-                return res.status(result.statusCode).send({
-                    success: result.success,
-                    message: result.message,
-                });
             })
         } catch (e) {
-            next(e)
+            console.log(e)
+            return next(createError(500))
         }
     },
     // DELETE FOLDER
@@ -421,23 +431,28 @@ module.exports = {
 
             deleteFolderFromGCS(pathFolder, async (error, result) => {
                 if (error) {
-                    console.log(error);
                     return next(createError(500, "Error when delelte folder"));
                 }
 
-                const currentFolder = new Folder(folder.id);
+                try {
+                    // If GCS deletion is successful, proceed with deleting files and folder in the database
+                    const currentFolder = new Folder(folder.id);
+                    await currentFolder.deleteAllFiles(folder.id);
+                    await Folder.delete(folder.id);
 
-                await currentFolder.deleteAllFiles(folder.id);
-
-                await Folder.delete(folder.id);
-
-                return res.status(result.statusCode).send({
-                    success: result.success,
-                    message: result.message,
-                });
+                    // Only send the response here after everything is done
+                    return res.status(result.statusCode).send({
+                        success: result.success,
+                        message: result.message,
+                    });
+                } catch (dbError) {
+                    console.log(dbError);
+                    return next(createError(500, "Error while deleting folder data from database"));
+                }
             })
         } catch (e) {
-            return next(e)
+            console.log(e);
+            return next(createError(500))
         }
     },
     // GET STRUCETURE DOCUMENT

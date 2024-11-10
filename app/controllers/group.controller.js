@@ -7,6 +7,8 @@ const Post = require("../models/post.model");
 const Media = require("../models/media.model");
 const prisma = require("../services/prisma");
 const { getPermissionGroup, getStateInGroup, getStateRelation } = require("../utils/helper.util");
+const { connect } = require("socket.io-client");
+const { parse } = require("dotenv");
 
 const groupController = {
     //-------- CHANGE PERMISSION ---------//
@@ -434,6 +436,59 @@ const groupController = {
 
             const userAttendGroupSaved = await userAttendGroup.save();
 
+            const resAttend = await prisma.userAttendGroup.findUnique({
+                where: {
+                    groupId_userId: {
+                        userId: parseInt(userId),
+                        groupId: parseInt(groupId)
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                }
+            })
+
+            const userAdmins = await prisma.userAttendGroup.findMany({
+                where: {
+                    groupId: parseInt(groupId),
+                    permission: "ADMIN",
+                },
+            })
+
+            const group = await prisma.group.findUnique({
+                where: {
+                    id: parseInt(groupId)
+                }
+            })
+
+            const io = req.app.get("socketio")
+
+            userAdmins.forEach(async (admin) => {
+                const notify = await prisma.notify.create({
+                    data: {
+                        link: "groupId=" + groupId,
+                        message: "đã gửi yêu cầu tham gia nhóm " + group.groupName,
+                        type: "REQUEST_GROUP",
+                        userId: admin.userId,
+                        userSendId: parseInt(userId),
+                    },
+                    include: {
+                        userSend: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
+                        groupSend: true
+                    }
+                })
+                io.to(`user_${admin.userId}`).emit("newNotification", notify)
+                io.to(`user_${admin.userId}`).emit("newRequestAttendGroup", resAttend)
+            })
+
             res.send(userAttendGroupSaved)
 
         } catch (e) {
@@ -452,6 +507,22 @@ const groupController = {
             if (!isPenddingAttend) return next(createError(400))
 
 
+            const resAttend = await prisma.userAttendGroup.findUnique({
+                where: {
+                    groupId_userId: {
+                        userId: parseInt(userId),
+                        groupId: parseInt(groupId)
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                }
+            })
+
             const deletedAttend = await prisma.userAttendGroup.delete({
                 where: {
                     groupId_userId: {
@@ -459,6 +530,35 @@ const groupController = {
                         userId
                     }
                 }
+            })
+
+
+
+            const userAdmins = await prisma.userAttendGroup.findMany({
+                where: {
+                    groupId: parseInt(groupId),
+                    permission: "ADMIN",
+                },
+            })
+
+            const group = await prisma.group.findUnique({
+                where: {
+                    id: parseInt(groupId)
+                }
+            })
+
+            const io = req.app.get("socketio")
+
+            userAdmins.forEach(async (admin) => {
+                const notify = await prisma.notify.deleteMany({
+                    where: {
+                        userId: admin.userId,
+                        userSendId: parseInt(userId),
+                        type: "REQUEST_GROUP"
+                    }
+                })
+
+                io.to(`user_${admin.userId}`).emit("cancelRequestAttendGroup", resAttend)
             })
 
             res.send(deletedAttend)
@@ -473,6 +573,7 @@ const groupController = {
         try {
             const { groupId, userId } = req.params;
             const { state } = req.body;
+            const userOwnId = parseInt(req.payload.aud)
 
             if (!Object.values(StateAttendGroup).includes(state)) {
                 return next(createError(400, "State not valid"))
@@ -491,6 +592,69 @@ const groupController = {
             })
 
             const userAttendGroupSaved = await userAttendGroup.save();
+
+            const resAttend = await prisma.userAttendGroup.findUnique({
+                where: {
+                    groupId_userId: {
+                        userId: parseInt(userId),
+                        groupId: parseInt(groupId)
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                }
+            })
+
+            const userAdmins = await prisma.userAttendGroup.findMany({
+                where: {
+                    groupId: parseInt(groupId),
+                    permission: "ADMIN",
+                },
+            })
+
+            const group = await prisma.group.findUnique({
+                where: {
+                    id: parseInt(groupId)
+                }
+            })
+
+            const io = req.app.get("socketio")
+
+
+            for (const admin of userAdmins) {
+                const notify = await prisma.notify.deleteMany({
+                    where: {
+                        userId: admin.userId,
+                        userSendId: parseInt(userId, 10),
+                        type: "REQUEST_GROUP"
+                    }
+                });
+
+                io.to(`user_${admin.userId}`).emit("cancelRequestAttendGroup", resAttend);
+            }
+
+            const notify = await prisma.notify.create({
+                data: {
+                    link: "groupId=" + groupId,
+                    message: "Bạn đã trở thành thành viên của nhóm",
+                    type: "REQUEST_GROUP",
+                    userId: parseInt(userId),
+                    groupSendId: parseInt(groupId),
+                    userSendId: userOwnId
+                },
+                include: {
+                    groupSend: true
+                }
+            })
+
+            console.log(notify)
+
+            io.to(`user_${userId}`).emit("newNotification", notify)
+
 
             res.send(userAttendGroupSaved)
         } catch (e) {
@@ -524,6 +688,7 @@ const groupController = {
         try {
             const { groupId, postId } = req.params;
             const isApproved = true;
+            const userAuthId = req.payload.aud;
 
             if (!groupId || !postId) return next(createError(400))
 
@@ -535,7 +700,7 @@ const groupController = {
                 },
                 data: {
                     isApproved,
-                    createdAt: Date.now()
+                    createdAt: new Date(Date.now())
                 }
             })
 
@@ -574,7 +739,38 @@ const groupController = {
                 }
             })
 
+            const userAdmins = await prisma.userAttendGroup.findMany({
+                where: {
+                    groupId: parseInt(postData.groupId),
+                    permission: "ADMIN",
+                },
+            })
+            const io = req.app.get("socketio")
+
+            for (const admin of userAdmins) {
+                io.to(`user_${admin.userId}`).emit("acceptPost", postData);
+            }
+
+            const notify = await prisma.notify.create({
+                data: {
+                    link: "groupId=" + groupId,
+                    message: "Bài viết của bạn đã được duyệt trong nhóm",
+                    type: "REQUEST_GROUP",
+                    userId: postData.ownerId,
+                    userSendId: parseInt(userAuthId),
+                    groupSendId: postData.groupId
+                },
+                include: {
+                    groupSend: true
+                }
+            })
+
+            io.to(`user_${postData.ownerId}`).emit("acceptPost", postData);
+
+            io.to(`user_${postData.ownerId}`).emit("newNotification", notify);
+
             res.status(200).json(postData)
+
         } catch (e) {
             console.log(e)
             return next(createError(500, "Error when accept post"))

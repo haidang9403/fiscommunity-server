@@ -1,31 +1,79 @@
 const app = require("../../app");
 const { createServer } = require('node:http');
 const { Server } = require('socket.io');
+const prisma = require("./prisma");
+const { FriendRequestStatus } = require("@prisma/client");
 
 const server = createServer(app);
 
-const io = new Server(server);
+const io = new Server(server, {
+    cors: {
+        origin: "*",
+        methods: ["GET", "POST"]
+    }
+});
 
 app.set('socketio', io);
 
-io.on('connection', (socket) => {
+const onlineUsers = new Map();
+
+const getFriends = async (userId) => {
+    const user = await prisma.user.findUnique({
+        where: {
+            id: parseInt(userId),
+        },
+        include: {
+            sendRelations: true,
+            reciveRelations: true,
+            conversations: {
+                include: {
+                    user: true
+                }
+            }
+        }
+    });
+
+    const conversationNotGroup = user.conversations.filter((conversation) => !conversation.isGroup)
+
+    const otherUsers = conversationNotGroup.map((e) => {
+        const otherUser = e.user.filter((user) => user.id != userId)
+        return otherUser[0]
+    })
+
+    return otherUsers
+}
+
+io.on('connection', async (socket) => {
     console.log(`New client connected: ${socket.id}`);
 
-    // Lắng nghe sự kiện join room để người dùng có thể tham gia vào phòng của chính họ
-    socket.on('joinRoom', (userId) => {
-        socket.join(`user_${userId}`);
-        console.log(`User ${userId} joined room: user_${userId}`);
+    const userId = socket.handshake.query.userId;
+
+    onlineUsers.set(userId, true);
+
+    socket.join(`user_${userId}`);
+    const friends = await getFriends(userId);
+
+    friends.forEach(friend => {
+        const isFriendOnline = onlineUsers.get(friend.id.toString());
+
+        socket.emit("updateUserStatus", { userId: friend.id, isActive: !!isFriendOnline });
+
+        io.to(`user_${friend.id}`).emit('updateUserStatus', { userId, isActive: true });
     });
 
-    // Lắng nghe sự kiện join conversation để người dùng tham gia đoạn chat
-    socket.on('joinConversation', (conversationId) => {
-        socket.join(`conversation_${conversationId}`);
-        console.log(`User joined conversation: ${conversationId}`);
-    });
+    console.log(`User ${userId} is online`);
 
     // Xử lý khi client ngắt kết nối
     socket.on('disconnect', () => {
-        console.log('Client disconnected:', socket.id);
+        onlineUsers.delete(userId);
+        friends.forEach(friend => {
+            const isFriendOnline = onlineUsers.get(friend.id.toString());
+
+            socket.emit("updateUserStatus", { userId: friend.id, isActive: !!isFriendOnline });
+
+            io.to(`user_${friend.id}`).emit('updateUserStatus', { userId, isActive: false });
+        });
+        console.log(`User ${userId} is offline`);
     });
 });
 

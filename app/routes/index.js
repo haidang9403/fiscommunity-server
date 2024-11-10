@@ -7,6 +7,7 @@ const documentRoute = require("./document.route");
 const postRoute = require("./post.route");
 const groupRoute = require("./group.route");
 const chatRoute = require("./chat.route");
+const searchRoute = require("./search.route");
 
 const mainRoute = express.Router();
 
@@ -17,7 +18,8 @@ mainRoute.use(
     userRoute,
     postRoute,
     groupRoute,
-    chatRoute
+    chatRoute,
+    searchRoute
 );
 
 module.exports = mainRoute;
