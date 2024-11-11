@@ -19,6 +19,8 @@ const authSchema = {
 
 const userSchema = {
     changePassword: Yup.object().shape({
+        confirmPassword: Yup.string().required("Hãy xác nhận lại mật khẩu").oneOf([Yup.ref('newPassword'), null], "Xác nhận không chính xác"),
+        newPassword: Yup.string().required("Hãy nhập mật khẩu mới").min(6, "Mật khẩu có tối thiểu 6 ký tự"),
         oldPassword: Yup.string().required("Hãy nhập mật khẩu cũ").test('matchOldPassword', 'Mật khẩu cũ không chính xác', async function (value) {
             const { userId } = this.options.context; // Lấy userId từ context
             const user = await prisma.user.findUnique({
@@ -33,8 +35,6 @@ const userSchema = {
             const isMatch = await bcrypt.compare(value, user.password);
             return isMatch;
         }),
-        newPassword: Yup.string().required("Hãy nhập mật khẩu mới").min(6, "Mật khẩu có tối thiểu 6 ký tự"),
-        confirmPassword: Yup.string().required("Hãy xác nhận lại mật khẩu").oneOf([Yup.ref('newPassword'), null], "Xác nhận không chính xác")
     })
 }
 

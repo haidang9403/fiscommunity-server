@@ -908,7 +908,7 @@ const postController = {
                 }
             })
 
-            let result;
+            let result = "ok";
             for (const media of medias) {
                 result = await deleteMediaFromCloudinary(media);
             }
@@ -918,6 +918,15 @@ const postController = {
             }
 
             const postDeleted = await Post.delete(postId);
+
+            await prisma.notify.deleteMany({
+                where: {
+                    link: {
+                        contains: `postId=${postDeleted.id}`
+                    }
+                }
+            });
+
 
             return res.send(postDeleted);
         } catch (e) {
@@ -1111,7 +1120,24 @@ const postController = {
                 },
             })
 
+            const io = req.app.get('socketio');
 
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                include: {
+                    user: true
+                }
+            })
+
+            conversation.user.forEach((user) => {
+                // if (user.id != senderId) {
+                io.to(`user_${user.id}`).emit('sendTextMessage', { message: messageRes })
+                // } else {
+                //     io.to(`user_${user.id}`.)
+                // }
+            })
 
             res.status(200).json(messageRes);
 

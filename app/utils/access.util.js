@@ -69,18 +69,18 @@ const accessOwnPost = async (req, res, next) => {
         const { postId } = req.params;
         const userId = req.payload.aud;
 
-        const groupId = req.params.groupId ? parseInt(req.params.groupId) : null;
+        // const groupId = req.params.groupId ? parseInt(req.params.groupId) : null;
 
         const post = await Post.model.findUnique({
             where: {
                 id: parseInt(postId),
-                groupId: groupId
+                // groupId: groupId
             }
         })
 
         if (!post) return next(createError(404, "Post not found"))
 
-        if (userId !== post.ownerId) return next(createError(403, "Not permission to access post"))
+        // if (userId !== post.ownerId) return next(createError(403, "Not permission to access post"))
 
         return next();
     } catch (e) {

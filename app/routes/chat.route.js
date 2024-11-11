@@ -10,6 +10,7 @@ const chatRoute = express.Router();
 // ------------ API Chat --------------- //
 //--- Get conversation of user
 chatRoute.get("/conversation", verifyAccessToken, chatController.getConversation)
+chatRoute.get("/conversation/:conversationId/one", verifyAccessToken, chatController.getOneConversation)
 chatRoute.get("/info/conversation", verifyAccessToken, chatController.getInfoConversation)
 
 chatRoute.get("/conversation/:conversationId", verifyAccessToken, chatController.getMessages)

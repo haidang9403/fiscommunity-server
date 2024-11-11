@@ -21,7 +21,13 @@ const getRequestProfileUser = (req) => {
 
     allowdFields.forEach((field) => {
         if (req.body[field]) {
-            profile[field] = req.body[field];
+            if (field == "birthday") {
+                profile[field] = new Date(req.body[field]);
+            } else if (field == "gender") {
+                profile[field] = parseInt(req.body[field]);
+            } else {
+                profile[field] = req.body[field];
+            }
         }
     })
 

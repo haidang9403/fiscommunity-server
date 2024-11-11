@@ -13,6 +13,93 @@ const { getStateRelation } = require("../utils/helper.util");
 
 
 const chatController = {
+    getOneConversation: async (req, res, next) => {
+        try {
+            const conversationId = parseInt(req.params.conversationId);
+            const userId = parseInt(req.payload.aud)
+
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: conversationId
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    messages: {
+                        include: {
+                            sender: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            seens: {
+                                include: {
+                                    userProfile: true
+                                }
+                            },
+                            file: true,
+                            folder: true,
+                            post: {
+                                include: {
+                                    owner: {
+                                        include: {
+                                            userProfile: true
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        orderBy: {
+                            createdAt: "desc"
+                        },
+                        take: 20
+                    },
+                    admins: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                },
+            })
+
+            let stateBlock = "NONE";
+            const otherUser = conversation.user.filter((user) => user.id != userId)
+            const relation = conversation.isGroup ? ["NONE"] : await getStateRelation(userId, otherUser[0].id)
+
+            if (relation.includes("BLOCKED")) {
+                stateBlock = "BLOCKED"
+            }
+
+            if (relation.includes("BLOCKING")) {
+                stateBlock = "BLOCKING"
+            }
+
+
+            const unSeenMessageCount = await prisma.message.count({
+                where: {
+                    conversationId: conversation.id,
+                    seens: {
+                        none: {
+                            id: userId
+                        }
+                    }
+                },
+                take: 100
+            });
+
+            res.status(200).json({
+                ...conversation,
+                amountUnSeen: unSeenMessageCount,
+                stateBlock
+            });
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
     // get info all conversation
     getInfoConversation: async (req, res, next) => {
         try {
@@ -328,6 +415,12 @@ const chatController = {
                 adminIds: [currentUserId]
             });
 
+            const io = req.app.get('socketio');
+
+            for (const memberId of userIds) {
+                io.to(`user_${memberId}`).emit('newConversation', conversation)
+            }
+
             res.status(200).json(conversation);
         } catch (error) {
             console.error(error);
@@ -584,6 +677,56 @@ const chatController = {
                 },
             })
 
+            // const conversationIo = await prisma.conversation.findUnique({
+            //     where: {
+            //         id: messageRes
+            //     },
+            //     include: {
+            //         user: {
+            //             include: {
+            //                 userProfile: true
+            //             }
+            //         },
+            //         messages: {
+            //             include: {
+            //                 sender: {
+            //                     include: {
+            //                         userProfile: true
+            //                     }
+            //                 },
+            //                 seens: {
+            //                     include: {
+            //                         userProfile: true
+            //                     }
+            //                 },
+            //                 file: true,
+            //                 folder: true,
+            //                 post: {
+            //                     include: {
+            //                         owner: {
+            //                             include: {
+            //                                 userProfile: true
+            //                             }
+            //                         }
+            //                     }
+            //                 }
+            //             },
+            //             orderBy: {
+            //                 createdAt: "desc"
+            //             },
+            //             take: 20
+            //         },
+            //         admins: {
+            //             include: {
+            //                 userProfile: true
+            //             }
+            //         }
+            //     },
+            //     orderBy: {
+            //         lastMessageAt: "desc"
+            //     }
+            // })
+
             const io = req.app.get('socketio');
 
             const conversation = await prisma.conversation.findUnique({
@@ -728,6 +871,8 @@ const chatController = {
             conversation.user.forEach((user) => {
                 // if (user.id != senderId) {
                 io.to(`user_${user.id}`).emit('sendTextMessage', { message: messageRes })
+                // io.to(`user_${user.id}`).emit('newConversation', { conversation: messageRes })
+
                 // } else {
                 //     io.to(`user_${user.id}`.)
                 // }
