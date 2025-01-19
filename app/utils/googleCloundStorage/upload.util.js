@@ -31,8 +31,6 @@ const getUniqueFileName = async (fileName, destFolder) => {
         counter++;
     }
 
-    console.log("File: " + uniqueFileName);
-
 
     return uniqueFileName;
 };

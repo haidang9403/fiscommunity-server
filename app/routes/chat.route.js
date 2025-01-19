@@ -22,10 +22,10 @@ chatRoute.get("/conversation/:conversationId/file", verifyAccessToken, chatContr
 chatRoute.post("/conversation/user/:userId", verifyAccessToken, chatController.createConversationOne)
 
 //--- Update conversation -- socket
-chatRoute.put("/conversation/:conversationId", verifyAccessToken, chatAccess.roleAdmin, chatController.updateConversation)
+// chatRoute.put("/conversation/:conversationId", verifyAccessToken, chatAccess.roleAdmin, chatController.updateConversation)
 
 //--- Delete conversation -- socket
-chatRoute.delete("/conversation/:conversationId", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
+// chatRoute.delete("/conversation/:conversationId", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
 
 //--- Chat message text -- socket
 chatRoute.post("/conversation/:conversationId/message", verifyAccessToken, chatAccess.checkValidConversation, chatAccess.relation, chatController.sendTextMessage)
@@ -43,13 +43,13 @@ chatRoute.post("/conversation/:conversationId/message/folder", verifyAccessToken
 chatRoute.post("/conversation/:conversationId/seen", verifyAccessToken, chatAccess.checkValidConversation, chatController.seenMeesage)
 
 //--- Delete message 
-chatRoute.delete("/conversation/:conversationId/message/:messageId/delete", verifyAccessToken, chatAccess.message, chatController.deleteMessage)
+// chatRoute.delete("/conversation/:conversationId/message/:messageId/delete", verifyAccessToken, chatAccess.message, chatController.deleteMessage)
 
 //--- Unsend message -- socket
-chatRoute.delete("/conversation/:conversationId/message/:messageId/retrieve", verifyAccessToken, chatAccess.message, chatController.unsendMessage)
+// chatRoute.delete("/conversation/:conversationId/message/:messageId/retrieve", verifyAccessToken, chatAccess.message, chatController.unsendMessage)
 
 //--- Hard delete message -- socket
-chatRoute.delete("/conversation/:conversationId/message/:messageId/hard-delete", verifyAccessToken, chatAccess.message, chatController.hardDeleteMessage)
+// chatRoute.delete("/conversation/:conversationId/message/:messageId/hard-delete", verifyAccessToken, chatAccess.message, chatController.hardDeleteMessage)
 
 // ------------ API Chat Group --------------- //
 
@@ -57,19 +57,19 @@ chatRoute.delete("/conversation/:conversationId/message/:messageId/hard-delete",
 chatRoute.post("/conversation/group", verifyAccessToken, chatController.createConversationGroup)
 
 // --- Delete conversation group -- socket
-chatRoute.delete("/conversation/:conversationId/group", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
+// chatRoute.delete("/conversation/:conversationId/group", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
 
 //--- Addmember to group -- socket
-chatRoute.put("/conversation/:conversationId/add-member", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.addMemberConversation)
+// chatRoute.put("/conversation/:conversationId/add-member", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.addMemberConversation)
 
 //--- Removemember from group -- socket
-chatRoute.delete("/conversation/:conversationId/remove-member", verifyAccessToken, chatAccess.roleAdmin, chatController.removeMemberConversation)
+// chatRoute.delete("/conversation/:conversationId/remove-member", verifyAccessToken, chatAccess.roleAdmin, chatController.removeMemberConversation)
 
 //--- Add admin group -- socket
-chatRoute.put("/conversation/:conversationId/add-admin", verifyAccessToken, chatAccess.roleAdmin, chatController.addAdminConversation)
+// chatRoute.put("/conversation/:conversationId/add-admin", verifyAccessToken, chatAccess.roleAdmin, chatController.addAdminConversation)
 
 //--- Exit group -- socket
-chatRoute.delete("/conversation/:conversationId/exit", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.exitConversationGroup)
+// chatRoute.delete("/conversation/:conversationId/exit", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.exitConversationGroup)
 
 
 module.exports = chatRoute;

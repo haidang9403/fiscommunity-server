@@ -38,7 +38,7 @@ userRoute.post("/user/unfriend/:reciveId", verifyAccessToken, userController.unf
 //--- Remove Addfriend
 userRoute.post("/user/removeinvite/:reciveId", verifyAccessToken, userController.removeInvite)
 
-//--- Follow -- socket
+//--- Follow -- socket 
 userRoute.post("/user/follow/:reciveId", verifyAccessToken, userController.followUser)
 
 //--- Block

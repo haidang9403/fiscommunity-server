@@ -57,6 +57,20 @@ model User {
   sendNotifications Notify[] @relation("SendNotify")
 
   adminConversations Conversation[] @relation("AdminConversation")
+
+  chatbot Chatbot?
+
+  projects Project[]
+
+  tasks Task[]
+
+  projectMember ProjectMember[]
+
+  taskAttachments TaskAttachment[]
+
+  approveTask Task[] @relation("ApproveTask")
+
+  historyChangeTask TaskHistory[]
 }
 
 model UserRelation {
@@ -211,6 +225,7 @@ model File {
   size    Float
   from    UploadDocumentWhere @default(USER)
   privacy TypePrivacy @default(PUBLIC)
+  fileType String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -351,6 +366,8 @@ model Message {
 
   deleted Boolean @default(false)
 
+  isFromChatbotAI Boolean @default(false)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -413,4 +430,155 @@ enum TypeNotify {
   LIKE_COMMENT
   SHARE_POST
   REQUEST_GROUP
+}
+
+model Chatbot {
+  id  Int   @id @default(autoincrement())
+  name String
+  settings Json
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  userId Int @unique
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Project {
+  id Int @id @default(autoincrement())
+  name String
+  description String
+
+  userId Int
+  createdBy User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createAt DateTime @default(now())
+  deadline DateTime
+
+  // relations
+  tasks Task[]
+
+  members ProjectMember[]
+}
+
+model ProjectMember {
+  memberId Int
+  member User @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  projectId Int
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@id([memberId, projectId])
+}
+
+model Task {
+  id Int @id @default(autoincrement())
+  name String
+  status StatusTask @default(PENDING)
+  startDate DateTime
+  endDate DateTime
+  actualStartDate DateTime
+  actualEndDate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isApproved Boolean @default(false)
+
+  // Relation
+  projectId Int
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  assignedToId Int
+  assignedTo User @relation(fields: [assignedToId], references: [id], onDelete: Cascade)
+
+  approveById Int?
+  approveBy User? @relation("ApproveTask", fields: [approveById], references: [id], onDelete: SetNull)
+
+  comments TaskComment[]
+
+  taskDependencies TaskDependency[] @relation("CurrentTask")
+
+  dependentBy TaskDependency[] @relation("DependentTask")
+
+  histories TaskHistory[]
+}
+
+model TaskHistory {
+  id Int @id @default(autoincrement())
+  oldStatus StatusTask
+  newStatus StatusTask
+  changeDate DateTime @default(now())
+  comment String?
+
+  // relation
+  taskId Int
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  changedById Int
+  changedBy User @relation(fields: [changedById], references: [id], onDelete: Cascade)
+}
+
+model TaskComment {
+  id Int @id @default(autoincrement())
+  content String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  isUpdated Boolean @default(false)
+
+  taskId Int
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+}
+
+model TaskAttachment {
+  id Int @id @default(autoincrement())
+  fileName String
+  url String
+  createdAt DateTime @default(now())
+  fileType String
+  attachmentType AttachmentType @default(ASSIGNED)
+
+  uploadById Int
+  uploadBy User @relation(fields: [uploadById],references: [id], onDelete: Cascade)
+}
+
+model TaskDependency {
+  id Int @id @default(autoincrement())
+  relationType RelationType @default(ES)
+  dependencyStatus DependencyStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // relation
+  taskId Int
+  task  Task @relation("CurrentTask",fields: [taskId], references: [id], onDelete: Cascade, map: "task_dependency_task_fk")
+
+  dependentTaskId Int
+  dependentTask Task @relation("DependentTask",fields: [taskId], references: [id], onDelete: Cascade, map: "task_dependency_dependsOn_fk")
+}
+
+enum DependencyStatus {
+  ACTIVE
+  FAILED
+  CANCELED
+}
+
+enum RelationType {
+  ES
+  SS
+  EE
+  SE
+}
+
+enum AttachmentType {
+  ASSIGNED
+  SUBMITTED
+}
+
+enum StatusTask {
+  PENDING
+  IN_PROGRESS
+  PENDING_PREVIEW
+  COMPLETED
+  ON_HOLD
+  FAILED
+  OVERDUE
 }

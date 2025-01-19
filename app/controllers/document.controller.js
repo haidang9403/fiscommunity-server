@@ -14,6 +14,8 @@ const { UploadDocumentWhere, TypeGroup, TypePrivacy, GroupPermission } = require
 const Group = require("../models/groups/group.model");
 const UserAttendGroup = require("../models/groups/user.attend.group.model");
 const { getStateRelation } = require("../utils/helper.util");
+const { accessSync } = require("fs");
+const { updateFile, updateFileGCS, updateFolderGCS } = require("../utils/googleCloundStorage/update.util");
 
 
 module.exports = {
@@ -961,6 +963,151 @@ module.exports = {
             next(createError(500))
         }
     },
+    // UPDATE DOCUMENT
+    updateFile: async (req, res, next) => {
+        try {
+            const { privacy, title } = req.body;
 
+            const userIdReq = req.payload.aud;
+
+            const fileId = req.params.fileId;
+
+            if (!fileId) return next(createError(400, "file id is missing"))
+
+            const oldFile = await File.get(fileId)
+
+            if (oldFile.from == UploadDocumentWhere.MESSAGE) return createError(403)
+
+            if (userIdReq != oldFile.ownerId && oldFile.from != UploadDocumentWhere.GROUP) return createError(403)
+
+            let newFile = oldFile;
+
+            const pathFileArray = oldFile.url.split("/");
+            pathFileArray.shift();
+            const pathFile = pathFileArray.join("/");
+
+            if (title) {
+                const newPathFile = pathFile.split("/").slice(0, -1).concat(title).join("/");
+                const { result, filePath, fileName, fileType } = await updateFileGCS(pathFile, newPathFile);
+                if (result) {
+                    newFile = await File.model.update({
+                        where: {
+                            id: oldFile.id
+                        },
+                        data: {
+                            title: fileName,
+                            fileType: fileType,
+                            privacy: privacy ?? oldFile.privacy,
+                            url: filePath
+                        },
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    })
+                } else return next(createError(500, "Update file failed"))
+            } else {
+                if (privacy) {
+                    newFile = await File.model.update({
+                        where: {
+                            id: oldFile.id
+                        },
+                        data: {
+                            privacy: privacy
+                        },
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    })
+                }
+            }
+
+
+
+            return res.status(200).send(newFile)
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+    // UPDATE DOCUMENT
+    updateFolder: async (req, res, next) => {
+        try {
+            const { privacy, title } = req.body;
+
+            const userIdReq = req.payload.aud;
+
+            const folderId = req.params.folderId;
+
+            if (!folderId) return next(createError(400, "file id is missing"))
+
+            const oldFolder = await Folder.get(folderId)
+
+            if (oldFolder.from == UploadDocumentWhere.MESSAGE) return createError(403)
+
+            if (userIdReq != oldFolder.ownerId && oldFolder.from != UploadDocumentWhere.GROUP) return createError(403)
+
+            let newFolder = oldFolder;
+
+            const pathFolderArray = oldFolder.url.split("/");
+            pathFolderArray.shift();
+            const pathFolder = pathFolderArray.join("/");
+
+            if (title) {
+                const newFolderPath = pathFolder.split("/").slice(0, -1).concat(title).join("/");
+                const { result, folderPath, folderName } = await updateFolderGCS(pathFolder, newFolderPath);
+                if (result) {
+                    newFolder = await Folder.model.update({
+                        where: {
+                            id: oldFolder.id
+                        },
+                        data: {
+                            title: folderName,
+                            privacy: privacy ?? oldFolder.privacy,
+                            url: folderPath
+                        },
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    })
+                } else return next(createError(500, "Update file failed"))
+
+            } else {
+                if (privacy) {
+                    newFolder = await Folder.model.update({
+                        where: {
+                            id: oldFolder.id
+                        },
+                        data: {
+                            privacy: privacy
+                        },
+                        include: {
+                            owner: {
+                                include: {
+                                    userProfile: true
+                                }
+                            }
+                        }
+                    })
+                }
+            }
+
+            return res.status(200).send(newFolder)
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
 }
 
