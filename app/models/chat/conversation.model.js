@@ -222,7 +222,11 @@ class Conversation {
                 }
             },
             include: {
-                user: true
+                user: {
+                    include: {
+                        userProfile: true
+                    }
+                },
             }
         });
 
@@ -236,6 +240,23 @@ class Conversation {
             data: {
                 admins: {
                     connect: adminIds.map(adminId => ({ id: parseInt(adminId) }))
+                }
+            },
+            include: {
+                user: true
+            }
+        });
+
+        return conversation;
+    }
+
+    // Xóa quản trị viên ra khỏi nhóm
+    static async removeAdmin(conversationId, adminIds) {
+        const conversation = await prisma.conversation.update({
+            where: { id: parseInt(conversationId) },
+            data: {
+                admins: {
+                    disconnect: adminIds.map(adminId => ({ id: parseInt(adminId) }))
                 }
             },
             include: {

@@ -130,6 +130,40 @@ const chatAccess = {
             return next(createError(500, "Error when access post"))
         }
     },
+    // CHECK MEMBER CONVERSATION
+    roleMember: async (req, res, next) => {
+        try {
+            let conversationId
+            let conversation = req.conversation
+            const userId = req.payload.aud;
+
+            if (!conversation) {
+                conversationId = req.params.conversationId;
+
+                if (!conversationId) return next(createError(404, "Conversation params not found"))
+
+                conversation = await Conversation.model.findUnique({
+                    where: {
+                        id: parseInt(conversationId)
+                    },
+                    include: {
+                        user: true,
+                        admins: true
+                    }
+                })
+            }
+
+            if (!conversation) return next(createError(404, "Conversation not found"))
+
+            const isMember = conversation.user.some(existingUser => existingUser.id === parseInt(userId));
+            if (!isMember) return next(createError(403, "Not permission to access conversation"))
+
+            return next()
+        } catch (e) {
+            console.log(e)
+            return next(createError(500, "Error when access post"))
+        }
+    },
     //------- OWN MESSAGE ------//
     message: async (req, res, next) => {
         try {

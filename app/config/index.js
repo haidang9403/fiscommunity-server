@@ -24,6 +24,14 @@ const config = {
         api_key: process.env.CLOUND_API_KEY,
         // eslint-disable-next-line no-undef
         api_secret: process.env.CLOUND_API_SECRET
+    },
+    liveKit: {
+        // eslint-disable-next-line no-undef
+        api_key: process.env.LIVEKIT_API_KEY,
+        // eslint-disable-next-line no-undef
+        api_secret: process.env.LIVEKIT_SECRET,
+        // eslint-disable-next-line no-undef
+        url: process.env.LIVEKIT_URL
     }
 }
 

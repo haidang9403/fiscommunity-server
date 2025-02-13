@@ -8,11 +8,41 @@ const File = require("../models/document/file.model");
 const Folder = require("../models/document/folder.model");
 const prisma = require("../services/prisma");
 const { deleteFileFromGCS, deleteFolderFromGCS } = require("../utils/googleCloundStorage/delete.util");
-const { response } = require("express");
 const { getStateRelation } = require("../utils/helper.util");
 
 
 const chatController = {
+    getMemberGroupChat: async (req, res, next) => {
+        try {
+            const { conversationId } = req.params;
+            const conversation = await Conversation.model.findFirst({
+                where: {
+                    id: parseInt(conversationId),
+                    isGroup: true
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    admins: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                }
+            })
+
+            if (!conversation) return next(createError(404))
+
+            res.status(201).json(conversation)
+
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
     getOneConversation: async (req, res, next) => {
         try {
             const conversationId = parseInt(req.params.conversationId);
@@ -430,9 +460,18 @@ const chatController = {
     //---- ADD MEMBER CONVERSATION GROUP----//
     addMemberConversation: async (req, res, next) => {
         try {
-            const userIds = req.body.userIds;
+            const userIds = req.body.userIds?.split(",");
             const currentUserId = parseInt(req.payload.aud);
             const conversationId = req.params.conversationId;
+
+            const conversation = await Conversation.model.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                include: {
+                    user: true
+                }
+            })
 
             for (const userId of userIds) {
                 const user = await prisma.user.findUnique({
@@ -440,8 +479,9 @@ const chatController = {
                         id: parseInt(userId)
                     }
                 })
-
                 if (!user) return next(createError(404, "User not found"))
+                const userExists = conversation.user.some(existingUser => existingUser.id === parseInt(userId));
+                if (userExists) return next(createError(400, "User already join group"))
             }
 
 
@@ -456,7 +496,7 @@ const chatController = {
     //---- REMOVE MEMBER CONVERSATION GROUP----//
     removeMemberConversation: async (req, res, next) => {
         try {
-            const userIds = req.body.userIds;
+            const userIds = req.body.userIds?.split(",") || [req.body.userId];
             const currentUserId = parseInt(req.payload.aud);
             const conversationId = req.params.conversationId;
 
@@ -540,7 +580,7 @@ const chatController = {
     //---- ADD ADMIN CONVERSATION GROUP----//
     addAdminConversation: async (req, res, next) => {
         try {
-            const userIds = req.body.userIds;
+            const userIds = req.body.userIds?.split(",") || [req.body.userId];
             const currentUserId = parseInt(req.payload.aud);
             const conversationId = req.params.conversationId;
 
@@ -572,6 +612,48 @@ const chatController = {
 
 
             const conversationUpdated = await Conversation.addAdmin(conversationId, adminIds);
+
+            res.status(200).json(conversationUpdated);
+        } catch (error) {
+            console.error(error);
+            next(createError(500, "Error when adding admin conversation"))
+        }
+    },
+    //---- REMOVE ADMIN CONVERSATION GROUP----//
+    removeAdminConversation: async (req, res, next) => {
+        try {
+            const userIds = req.body.userIds?.split(",") || [req.body.userId];
+            // const currentUserId = parseInt(req.payload.aud);
+            const conversationId = req.params.conversationId;
+
+            const conversation = await Conversation.model.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                include: {
+                    user: true,
+                    admins: true
+                }
+            })
+
+            let adminIds = []
+
+            for (const userId of userIds) {
+                const user = await prisma.user.findUnique({
+                    where: {
+                        id: parseInt(userId)
+                    }
+                })
+
+                if (!user) return next(createError(404, "User not found"))
+                // if (user.id == currentUserId) return next(createError(400, "Can not add current user"))
+                const userExists = conversation.admins.some(existingUser => existingUser.id === parseInt(userId));
+                if (!userExists) return next(createError(400, "User not in group"))
+                adminIds.push(userId)
+            }
+
+
+            const conversationUpdated = await Conversation.removeAdmin(conversationId, adminIds);
 
             res.status(200).json(conversationUpdated);
         } catch (error) {

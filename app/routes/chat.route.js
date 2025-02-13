@@ -56,20 +56,26 @@ chatRoute.post("/conversation/:conversationId/seen", verifyAccessToken, chatAcce
 //--- Create conversation group -- socket
 chatRoute.post("/conversation/group", verifyAccessToken, chatController.createConversationGroup)
 
+//--- Get membergroup chat
+chatRoute.get("/conversation/:conversationId/group", verifyAccessToken, chatAccess.checkValidConversationGroup, chatAccess.roleMember, chatController.getMemberGroupChat)
+
 // --- Delete conversation group -- socket
-// chatRoute.delete("/conversation/:conversationId/group", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
+chatRoute.delete("/conversation/:conversationId/group", verifyAccessToken, chatAccess.roleAdmin, chatController.deleteConversation)
 
 //--- Addmember to group -- socket
-// chatRoute.put("/conversation/:conversationId/add-member", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.addMemberConversation)
+chatRoute.put("/conversation/:conversationId/add-member", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.addMemberConversation)
 
 //--- Removemember from group -- socket
-// chatRoute.delete("/conversation/:conversationId/remove-member", verifyAccessToken, chatAccess.roleAdmin, chatController.removeMemberConversation)
+chatRoute.put("/conversation/:conversationId/remove-member", verifyAccessToken, chatAccess.checkValidConversationGroup, chatAccess.roleAdmin, chatController.removeMemberConversation)
 
 //--- Add admin group -- socket
-// chatRoute.put("/conversation/:conversationId/add-admin", verifyAccessToken, chatAccess.roleAdmin, chatController.addAdminConversation)
+chatRoute.put("/conversation/:conversationId/add-admin", verifyAccessToken, chatAccess.checkValidConversationGroup, chatAccess.roleAdmin, chatController.addAdminConversation)
+
+//--- Remove admin group -- socket
+chatRoute.put("/conversation/:conversationId/remove-admin", verifyAccessToken, chatAccess.checkValidConversationGroup, chatAccess.roleAdmin, chatController.removeAdminConversation)
 
 //--- Exit group -- socket
-// chatRoute.delete("/conversation/:conversationId/exit", verifyAccessToken, chatAccess.checkValidConversationGroup, chatController.exitConversationGroup)
+chatRoute.delete("/conversation/:conversationId/exit", verifyAccessToken, chatAccess.checkValidConversationGroup, chatAccess.roleMember, chatController.exitConversationGroup)
 
 
 module.exports = chatRoute;

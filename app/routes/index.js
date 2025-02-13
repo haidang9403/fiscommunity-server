@@ -8,6 +8,7 @@ const postRoute = require("./post.route");
 const groupRoute = require("./group.route");
 const chatRoute = require("./chat.route");
 const searchRoute = require("./search.route");
+const callRoute = require("./call.route")
 
 const mainRoute = express.Router();
 
@@ -19,7 +20,8 @@ mainRoute.use(
     postRoute,
     groupRoute,
     chatRoute,
-    searchRoute
+    searchRoute,
+    callRoute
 );
 
 module.exports = mainRoute;
