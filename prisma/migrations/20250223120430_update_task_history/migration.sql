@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ActionTask" ADD VALUE 'FILE_CHANGED';

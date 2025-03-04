@@ -560,9 +560,44 @@ module.exports = {
 
             let isAccess = true;
 
-            if (file.ownerId !== userId) {
+            if (file.privacy == "PRIVATE" && file.ownerId !== userId && file.from == "USER") {
                 isAccess = false;
             }
+
+            if (file.privacy == "FRIENDS") {
+                const relations = await getStateRelation(userId, file.ownerId)
+                if (relations.includes("FRIEND")) {
+                    isAccess = false
+                }
+            }
+
+            if (file.from == "WORKSPACE") {
+                const fileDetails = await prisma.file.findUnique({
+                    where: {
+                        id: file.id
+                    },
+                    include: {
+                        taskSubmissions: {
+                            include: {
+                                assignedUsers: {
+                                    include: {
+                                        user: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+
+                const isValid = fileDetails.taskSubmissions.some((task) =>
+                    task.assignedUsers.some(user => user.userId == userId)
+                )
+
+                if (!isValid) {
+                    isAccess = false
+                }
+            }
+
 
             if (groupId) {
                 const group = await Group.model.findUnique({

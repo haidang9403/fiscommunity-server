@@ -8,7 +8,9 @@ const postRoute = require("./post.route");
 const groupRoute = require("./group.route");
 const chatRoute = require("./chat.route");
 const searchRoute = require("./search.route");
-const callRoute = require("./call.route")
+const callRoute = require("./call.route");
+const workspaceRoute = require("./workspace.route");
+const taskRoute = require("./task.route");
 
 const mainRoute = express.Router();
 
@@ -21,7 +23,9 @@ mainRoute.use(
     groupRoute,
     chatRoute,
     searchRoute,
-    callRoute
+    callRoute,
+    workspaceRoute,
+    taskRoute
 );
 
 module.exports = mainRoute;

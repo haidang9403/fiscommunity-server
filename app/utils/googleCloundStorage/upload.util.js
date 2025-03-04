@@ -35,6 +35,25 @@ const getUniqueFileName = async (fileName, destFolder) => {
     return uniqueFileName;
 };
 
+
+const getFileName = async (fileName, destFolder) => {
+    let uniqueFileName = fileName;
+    let fileExistsFlag = await fileExists(`${destFolder}/${uniqueFileName}`);
+
+    let counter = 1;
+    while (fileExistsFlag) {
+        const nameParts = fileName.split('.');
+        const baseName = nameParts.slice(0, -1).join('.');
+        const extension = nameParts.length > 1 ? `.${nameParts.pop()}` : '';
+        uniqueFileName = `${baseName}|${counter}${extension}`;
+        fileExistsFlag = await fileExists(`${destFolder}/${uniqueFileName}`);
+        counter++;
+    }
+
+
+    return uniqueFileName;
+};
+
 const getUniqueFolderName = async (folderPath) => {
     let uniqueFolderPath = folderPath;
     let folderExistsFlag = await folderExists(uniqueFolderPath);
@@ -82,6 +101,63 @@ const uploadFileToGCS = async (fileBuffer, fileName, destFolder, options = { rep
         callback(err, null);
     }
 };
+
+const uploadFilesToGCS = async (files, destFolder, callback) => {
+    try {
+        if (files.length == 0) callback(null, [])
+        const uploadPromises = files.map(async (file) => {
+            try {
+                const fileName = await getUniqueFileName(file.originalname, destFolder);
+                const filePath = `${destFolder}/${fileName}`;
+                const fileType = file.mimeType;
+
+
+                return new Promise((resolve, reject) => {
+                    const blob = bucket.file(`${filePath}`);
+                    const blobStream = blob.createWriteStream({
+                        resumable: false, // Không tiếp tục nếu quá trình tải lên bị gián đoạn
+                    });
+
+
+                    blobStream.on('error', (err) => {
+                        callback(err, null);
+                    });
+
+                    blobStream.on('finish', async () => {
+                        try {
+                            // await blob.makePrivate();
+                            // Lấy thông tin về file
+                            const [metadata] = await blob.getMetadata();
+                            const fileSizeMB = (metadata.size / (1024 * 1024)).toFixed(4);
+                            const publicUrl = format(`${bucket.name}/${blob.name}`);
+
+                            resolve({
+                                fileName,
+                                fileType,
+                                size: fileSizeMB,
+                                url: publicUrl,
+                            });
+                        } catch (e) {
+                            reject(e)
+                        }
+                    });
+
+                    // Ghi dữ liệu file lên Cloud Storage
+                    blobStream.end(file.buffer);
+                })
+            } catch (e) {
+                callback(e, null);
+            }
+        });
+
+        Promise.all(uploadPromises)
+            .then((uploadedFiles) => callback(null, uploadedFiles))
+            .catch((error) => callback(error, null));
+    } catch (error) {
+        console.error('Error uploading files:', error);
+        callback(error, null);
+    }
+}
 
 const uploadFolderToGCS = async (files, destFolder, options = { replace: false }, callback) => {
     // Xóa / ở cuối destFolder
@@ -159,5 +235,6 @@ const uploadFolderToGCS = async (files, destFolder, options = { replace: false }
 module.exports = {
     uploadMiddleware,
     uploadFileToGCS,
-    uploadFolderToGCS
+    uploadFolderToGCS,
+    uploadFilesToGCS
 }

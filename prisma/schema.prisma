@@ -62,6 +62,9 @@ model User {
 
   workspaces Workspace[]
   tasks UserOnTask[]
+
+  taskHistories TaskHistory[]
+  announcements Announcement[]
 }
 
 model UserRelation {
@@ -207,6 +210,7 @@ enum UploadDocumentWhere {
   USER
   GROUP
   MESSAGE
+  WORKSPACE
 }
 
 model File {
@@ -236,7 +240,9 @@ model File {
   messages Message[]
 
   // Thêm quan hệ với Task và Announcement
-  tasks Task[] @relation("TaskFiles")
+  taskAttachments Task[] @relation("FileAttachments")
+  taskSubmissions Task[] @relation("FileSubmissions")
+
   announcements Announcement[] @relation("AnnouncementFiles")
 }
 
@@ -483,6 +489,9 @@ model Announcement {
   workspaceId Int
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   files File[] @relation("AnnouncementFiles")
 }
 
@@ -490,7 +499,8 @@ model Task {
   id Int @id @default(autoincrement())
   title String
   description String
-  deadline DateTime
+  deadline DateTime?
+  submitAt DateTime?
   status StatusTask @default(PENDING)
 
   createdAt DateTime @default(now())
@@ -500,11 +510,18 @@ model Task {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   assignedUsers UserOnTask[]
-  files File[] @relation("TaskFiles") // Liên kết với File
+  fileAttachments File[] @relation("FileAttachments") // Liên kết với File
+  fileSubmissions File[] @relation("FileSubmissions") // Liên kết với File
+
+  taskHistories TaskHistory[]
 }
 
 model UserOnTask {
+  id Int @id @default(autoincrement())
+
   permission PermissionOnTask @default(NONE)
+
+  
 
   userId Int
   taskId Int
@@ -515,14 +532,47 @@ model UserOnTask {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@id([userId, taskId]) // Khóa chính kết hợp
+  @@unique([userId, taskId]) // Khóa chính kết hợp
+}
+
+model TaskHistory {
+  id Int @id @default(autoincrement())
+
+  userId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  taskId Int
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  action ActionTask @default(NONE)
+  oldValue  String?
+  newValue  String?
+
+}
+
+enum ActionTask {
+  NONE                  
+  CREATED               // Tạo
+  STATUS_CHANGED        // Thay đổi trạng thái
+  TITLE_UPDATED         // Cập nhật tiêu đề	
+  DESCRIPTION_UPDATED   // Cập nhật mô tả
+  DEADLINE_UPDATED      // Cập nhật thời hạn	
+  SUBMIT_AT_UPDATED     // Cập nhật thời điểm nộp	
+  USER_ASSIGNED         // Thêm người vào task
+  USER_UNASSIGNED       // Xóa người khỏi task
+  FILE_ATTACHED         // Thêm file đính kèm	
+  FILE_DELETED          // Xóa file đính kèm	
+  FILE_SUBMITTED        // Thêm bài nộp	
+  FILE_REMOVED	        // Xóa bài nộp	
+  FILE_CHANGED          // Thay đổi tập tin
+  TASK_COMPLETED        //Hoàn thành task	
 }
 
 enum PermissionOnTask {
   NONE
-  VIEW_ONLY
   MEMBER
-  ADMIN
 }
 
 enum StatusTask {
@@ -531,5 +581,4 @@ enum StatusTask {
   PENDING_PREVIEW
   COMPLETED
   FAILED
-  OVERDUE
 }

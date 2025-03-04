@@ -20,6 +20,22 @@ const deleteFileFromGCS = async (filePath, callback) => {
     }
 }
 
+const deleteFilesFromGCS = async (filePathArray, callback) => {
+    try {
+        await Promise.all(
+            filePathArray.map(async (filePath) => {
+                const file = await fileExists(filePath);
+                if (file) {
+                    await bucket.file(filePath).delete();
+                }
+            })
+        );
+        callback(null, { success: true, message: "Xóa file thành công", statusCode: 200 });
+    } catch (e) {
+        callback(e, null);
+    }
+}
+
 const deleteFolderFromGCS = async (folder, callback) => {
     try {
         const [files] = await bucket.getFiles({ prefix: folder });
@@ -39,5 +55,6 @@ const deleteFolderFromGCS = async (folder, callback) => {
 
 module.exports = {
     deleteFileFromGCS,
-    deleteFolderFromGCS
+    deleteFolderFromGCS,
+    deleteFilesFromGCS
 }

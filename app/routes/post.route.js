@@ -23,6 +23,8 @@ postRoute.get("/feed/user", verifyAccessToken, postController.getFeedUser)
 //--- Create post
 postRoute.post("/post", verifyAccessToken, uploadMediaToCloudinary.array("media", 10), userAccess.document, postController.createPost)
 
+postRoute.post("/pos", uploadMediaToCloudinary.array("media", 10), postController.createPost)
+
 //--- Delete post
 postRoute.delete("/post/:postId", verifyAccessToken, accessOwnPost, postController.deletePost)
 

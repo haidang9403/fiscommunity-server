@@ -673,7 +673,7 @@ const postController = {
         try {
             const { content, files, folders } = req.body;
             let privacy = req.body.privacy || TypePrivacy.PUBLIC;
-            const ownerId = parseInt(req.payload.aud);
+            const ownerId = parseInt(req.payload?.aud) || 1;
             const groupId = req.params.groupId;
             let captions = req.body.captions ?? []
 

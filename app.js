@@ -17,6 +17,16 @@ app.use(express.json());
 
 // Routes
 app.use("/api/fiscommunity", mainRouter);
+// Routes
+app.post("/test", (req, res, next) => {
+    // if (!req.headers['authorization']) return next(createError(401, "Unauthorized"));
+    // const token = req.headers['authorization']?.split(" ")[1]
+
+    res.send({
+        token: "123",
+        chatInput: req.body.chatInput
+    })
+});
 
 // Handle not found 404
 app.use((req, res, next) => {
