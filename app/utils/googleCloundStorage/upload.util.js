@@ -92,6 +92,7 @@ const uploadFileToGCS = async (fileBuffer, fileName, destFolder, options = { rep
             const [metadata] = await blob.getMetadata();
             const fileSizeMB = (metadata.size / (1024 * 1024)).toFixed(4);
             const publicUrl = format(`${bucket.name}/${blob.name}`);
+            
             callback(null, { fileName, url: publicUrl, size: fileSizeMB });
         });
 

@@ -12,6 +12,30 @@ const { getStateRelation } = require("../utils/helper.util");
 
 
 const chatController = {
+    getConversationAdmin: async (req, res, next) => {
+        try {
+            const userId = req.payload.aud;
+
+            const user = await prisma.user.findUnique({
+                where: {
+                    id: parseInt(userId),
+                },
+                include: {
+                    adminConversations: {
+                        where: {
+                            isChatbot: false,
+                            isGroup: true
+                        }
+                    }
+                }
+            })
+
+            res.status(200).json(user.adminConversations)
+        } catch(e){
+            console.log(e)
+            next(createError(500))
+        }
+    },
     getMemberGroupChat: async (req, res, next) => {
         try {
             const { conversationId } = req.params;

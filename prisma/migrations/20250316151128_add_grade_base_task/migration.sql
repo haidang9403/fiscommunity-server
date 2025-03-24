@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Task" ADD COLUMN     "gradeBase" DOUBLE PRECISION NOT NULL DEFAULT 10;

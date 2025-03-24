@@ -23,8 +23,7 @@ app.post("/test", (req, res, next) => {
     // const token = req.headers['authorization']?.split(" ")[1]
 
     res.send({
-        token: "123",
-        chatInput: req.body.chatInput
+        success: true
     })
 });
 

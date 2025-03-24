@@ -11,6 +11,7 @@ const searchRoute = require("./search.route");
 const callRoute = require("./call.route");
 const workspaceRoute = require("./workspace.route");
 const taskRoute = require("./task.route");
+const aiRoute = require("./ai.route");
 
 const mainRoute = express.Router();
 
@@ -25,7 +26,8 @@ mainRoute.use(
     searchRoute,
     callRoute,
     workspaceRoute,
-    taskRoute
+    taskRoute,
+    aiRoute
 );
 
 module.exports = mainRoute;

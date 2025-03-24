@@ -585,13 +585,31 @@ module.exports = {
                                     }
                                 }
                             }
+                        },
+                        announcements: true,
+                        taskAttachments: {
+                            include: {
+                                assignedUsers: {
+                                    include: {
+                                        user: true
+                                    }
+                                }
+                            }
                         }
                     }
                 })
 
-                const isValid = fileDetails.taskSubmissions.some((task) =>
+                let isValid = fileDetails.taskSubmissions.some((task) =>
                     task.assignedUsers.some(user => user.userId == userId)
                 )
+
+                isValid = fileDetails.taskAttachments.some((task) =>
+                    task.assignedUsers.some(user => user.userId == userId)
+                )
+
+                isValid = fileDetails.announcements.length > 0
+
+                isValid = true
 
                 if (!isValid) {
                     isAccess = false

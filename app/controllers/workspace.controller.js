@@ -7,7 +7,7 @@ const workspaceController = {
     create: async (req, res, next) => {
         try {
             const { conversationId } = req.params;
-            const { name, description } = req.body;
+            const { name, description, isClass } = req.body;
             if (!name && !conversationId) {
                 return next(createError(400, "Missing name or conversationId"))
             }
@@ -16,6 +16,7 @@ const workspaceController = {
                 data: {
                     name,
                     description,
+                    isClass,
                     userId: parseInt(userId),
                     conversationId: parseInt(conversationId)
                 },

@@ -10,6 +10,16 @@ const LIVEKIT_URL = config.liveKit.url;
 
 const roomService = new RoomServiceClient(LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_SECRET);
 
+function formatCallDuration(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+
+    return h > 0
+        ? `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+        : `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+}
+
 const callController = {
     // Join room chat call
     joinRoom: async (req, res, next) => {
@@ -37,12 +47,20 @@ const callController = {
 
             // Nếu chưa có room, tạo mới
             if (!existingRoom) {
-                await roomService.createRoom({ name: String(conversationId), emptyTimeout: 300 });
+                const start = JSON.stringify(Date.now());
+                await roomService.createRoom({ name: String(conversationId), emptyTimeout: 300, metadata: start });
             }
 
             // Tạo token để user tham gia vào room
-            const token = new AccessToken(LIVEKIT_API_KEY, LIVEKIT_SECRET, { identity: String(userId), name: String(user.userProfile.fullname) });
-            token.addGrant({ roomJoin: true, room: String(conversationId), canPublish: true, canSubscribe: true, canPublishData: true });
+            const token = new AccessToken(
+                LIVEKIT_API_KEY, 
+                LIVEKIT_SECRET, 
+                { 
+                    identity: String(userId), 
+                    name: String(user.userProfile.fullname), 
+                    metadata: JSON.stringify(user.userProfile),
+                });
+            token.addGrant({ roomJoin: true, room: String(conversationId), canPublish: true, canSubscribe: true, canPublishData: true});
             const now = Math.floor(Date.now() / 1000); // Timestamp hiện tạ
             token.ttl = now + 3600;
             const tonkenJWT = await token.toJwt()
@@ -93,20 +111,24 @@ const callController = {
                             return null; // Trả về null nếu không tìm thấy thông tin hội thoại
                         }
 
+                        console.log(room)
+
                         const isCalling = memberCallingInfo.some((member) => String(member.identity) === String(userId));
 
                         return {
+                            nameRoom: room.name,
                             nameConversation: conversationInfo.name,
                             numMemberCalls: memberCallingInfo.length, // Số lượng người đang tham gia
                             members: conversationInfo.user,
                             isCalling,
                             isGroup: conversationInfo.isGroup,
+                            metadata: room.metadata
                         };
                     })
             );
 
             // Lọc ra những giá trị null (các object rỗng hoặc không hợp lệ)
-            const validRoomActive = roomActive.filter(room => room !== null);
+            const validRoomActive = roomActive.filter(room => room !== null).filter(room => room.numMemberCalls > 0);
 
             res.status(201).json(validRoomActive);
 
@@ -133,7 +155,20 @@ const callController = {
             }
 
             if(existingRoom.numParticipants === 0) {
+                
+                const startTime = new Date(JSON.parse(existingRoom.metadata));
+                const endTime = Date.now();
+                const durationInSeconds = Math.floor((endTime - startTime) / 1000);
                 await roomService.deleteRoom(conversationId);
+                await prisma.message.create({
+                    data: {
+                        conversationId: parseInt(conversationId),
+                        senderId: parseInt(userId),
+                        body: formatCallDuration(durationInSeconds),
+                        type: "HISTORY_CALL",
+                        seens: { connect: { id: parseInt(userId) }}
+                    } 
+                })
                 return res.json({ message: "Room deleted!" });
             }
 

@@ -2,6 +2,7 @@ const express = require('express');
 const { verifyAccessToken, verifyAccessTokenAndOwn } = require("../utils/jwt.util");
 const { uploadMiddleware } = require('../utils/googleCloundStorage/upload.util');
 const { uploadFile, uploadFolder, deleteFile, deleteFolder, getStructureDocument, getFile, getFolder, getInfoFolder, getFolerUser, getStructure, getStructureDocumentOfUser, updateFile, updateFolder } = require('../controllers/document.controller');
+const editController = require('../controllers/edit.controller');
 
 const documentRoute = express.Router();
 
@@ -30,5 +31,10 @@ documentRoute.get("/document/info/folder/:folderId", verifyAccessToken, getInfoF
 documentRoute.get("/document/file/:fileId", verifyAccessToken, getFile)
 
 documentRoute.get("/document/folder/:folderId", verifyAccessToken, getFolder)
+
+//--------- API Editor file -----------//
+documentRoute.get("/document/editor-config", verifyAccessToken, editController.getConfig)
+documentRoute.post("/document/editor/save", editController.saveFile)
+
 
 module.exports = documentRoute;

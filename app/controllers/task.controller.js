@@ -6,12 +6,158 @@ const { deleteFilesFromGCS, deleteFileFromGCS } = require("../utils/googleClound
 const { logTaskHistory } = require("../utils/logTaskHistory.util");
 
 const taskController = {
+    // get member with task class
+    getMemberTasksClass: async (req, res, next) => {
+        try {
+            //
+            const { workspaceId } = req.params;
+
+            const workspace = await prisma.workspace.findUnique({
+                where: {
+                    id: parseInt(workspaceId)
+                },
+                include: {
+                    conversation: {
+                        include: {
+                            admins: true
+                        }
+                    }
+                }
+            })
+
+            if (!workspace.isClass) return next(createError(400, "Workspace is not class"))
+
+            const members = await prisma.user.findMany({
+                where: {
+                    conversations: {
+                        some: {
+                            workspaces: {
+                                some: {
+                                    id: parseInt(workspaceId)
+                                }
+                            }
+                        }
+                    },
+                    id: {
+                        notIn: workspace.conversation.admins.map(user => user.id)
+                    }
+                },
+                include: {
+                    tasks: {
+                        where: {
+                            task: {
+                                workspaceId: parseInt(workspaceId),
+                                status: "IN_PROGRESS"
+                            }
+                        },
+                        include: {
+                            fileSubmissions: true,
+                            task: {
+                                include: {
+                                    fileAttachments: true,
+                                    taskHistories: true,
+
+                                }
+                            }
+                        }
+                    },
+                    userProfile: true
+                }
+            })
+
+            res.status(200).json(members)
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+    // get submission class
+    getSubmissionClass: async (req, res, next) => {
+        try {
+            const { workspaceId, conversationId, taskId } = req.params;
+
+            const workspace = await prisma.workspace.findUnique({
+                where: {
+                    id: parseInt(workspaceId)
+                },
+                include: {
+                    conversation: {
+                        include: {
+                            admins: true
+                        }
+                    }
+                }
+            })
+
+            if (!workspace.isClass) return next(createError(400, "Workspace is not class"))
+
+            const submissions = await prisma.userOnTask.findMany({
+                where: {
+                    taskId: parseInt(taskId),
+                    isSubmit: true
+                },
+                include: {
+                    fileSubmissions: true,
+                    user: {
+                        include: {
+                            userProfile: true
+
+                        }
+                    }
+                },
+                orderBy: {
+                    user: {
+                        userProfile: {
+                            fullname: "asc"
+                        }
+                    }
+                }
+            })
+
+            const notSubmissions = await prisma.userOnTask.findMany({
+                where: {
+                    taskId: parseInt(taskId),
+                    isSubmit: false,
+                    userId: {
+                        notIn: workspace.conversation.admins.map(user => user.id)
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+
+                        }
+                    }
+                },
+                orderBy: {
+                    user: {
+                        userProfile: {
+                            fullname: "asc"
+                        }
+                    }
+                }
+            })
+
+
+            res.status(200).json({ submissions, notSubmissions })
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
     // Get list task
     getList: async (req, res, next) => {
         try {
             const { workspaceId, conversationId } = req.params;
             const { isNotification, status } = req.query;
             const userId = req.payload.aud;
+
+            const workspace = await prisma.workspace.findUnique({
+                where: {
+                    id: parseInt(workspaceId)
+                }
+            })
 
             const conversation = await prisma.conversation.findUnique({
                 where: {
@@ -32,12 +178,162 @@ const taskController = {
                         workspaceId: parseInt(workspaceId),
                     },
                     include: {
-                        files: true
+                        files: true,
+                        user: {
+                            include: {
+                                userProfile: true
+                            }
+                        },
                     },
                     orderBy: {
                         createdAt: "desc"
                     }
                 })
+            } else if (workspace.isClass) {
+
+                if (status == StatusTask.PENDING) {
+                    let where = {
+                        workspaceId: parseInt(workspaceId),
+                        status,
+                    }
+
+                    if (isAdmin == -1) {
+                        return next(createError(403))
+                    }
+
+                    result = await prisma.task.findMany({
+                        where,
+                        include: {
+                            assignedUsers: {
+                                include: {
+                                    user: {
+                                        include: {
+                                            userProfile: true
+                                        }
+                                    },
+                                    fileSubmissions: true
+                                }
+                            },
+                            fileSubmissions: true,
+                            fileAttachments: true,
+                            workspace: true
+                        },
+                        orderBy: {
+                            createdAt: "desc"
+                        }
+                    })
+                } else if (status == StatusTask.IN_PROGRESS) {
+
+                    if (isAdmin == -1) {
+                        result = await prisma.task.findMany({
+                            where: {
+                                workspaceId: parseInt(workspaceId),
+                                status,
+                                assignedUsers: {
+                                    some: {
+                                        userId: parseInt(userId),
+                                        isSubmit: false
+                                    }
+                                }
+                            },
+                            include: {
+                                assignedUsers: {
+                                    where: {
+                                        userId: parseInt(userId),
+                                        isSubmit: false
+                                    },
+                                    include: {
+                                        user: {
+                                            include: {
+                                                userProfile: true
+                                            }
+                                        },
+                                        fileSubmissions: true
+                                    }
+                                },
+                                fileAttachments: true,
+                                taskHistories: true,
+                            }
+                        })
+                    } else {
+                        result = await prisma.task.findMany({
+                            where: {
+                                workspaceId: parseInt(workspaceId),
+                                status,
+                            },
+                            include: {
+                                assignedUsers: {
+                                    include: {
+                                        user: {
+                                            include: {
+                                                userProfile: true
+                                            }
+                                        },
+                                    }
+                                },
+                                fileAttachments: true,
+                                taskHistories: true,
+                            }
+                        })
+                    }
+                } else if (status == StatusTask.PENDING_PREVIEW) {
+                    if (isAdmin == -1) {
+                        result = await prisma.task.findMany({
+                            where: {
+                                workspaceId: parseInt(workspaceId),
+                                status: "IN_PROGRESS",
+                                assignedUsers: {
+                                    some: {
+                                        userId: parseInt(userId),
+                                        isSubmit: true
+                                    }
+                                }
+                            },
+                            include: {
+                                assignedUsers: {
+                                    where: {
+                                        userId: parseInt(userId),
+                                        isSubmit: true
+                                    },
+                                    include: {
+                                        user: {
+                                            include: {
+                                                userProfile: true
+                                            }
+                                        },
+                                        fileSubmissions: true
+                                    }
+                                },
+                                fileAttachments: true,
+                                taskHistories: true,
+                            }
+                        })
+                    } else {
+                        result = await prisma.task.findMany({
+                            where: {
+                                workspaceId: parseInt(workspaceId),
+                                status: "IN_PROGRESS",
+                            },
+                            include: {
+                                assignedUsers: {
+                                    where: {
+                                        isSubmit: true
+                                    },
+                                    include: {
+                                        user: {
+                                            include: {
+                                                userProfile: true
+                                            }
+                                        },
+                                        fileSubmissions: true
+                                    }
+                                },
+                                fileAttachments: true,
+                                taskHistories: true,
+                            }
+                        })
+                    }
+                }
             } else {
                 let where = {
                     workspaceId: parseInt(workspaceId),
@@ -62,6 +358,7 @@ const taskController = {
                                         userProfile: true
                                     }
                                 },
+                                fileSubmissions: true
                             }
                         },
                         fileSubmissions: true,
@@ -99,6 +396,26 @@ const taskController = {
 
             if (deadline == "null") deadline = null
 
+            const workspace = await prisma.workspace.findUnique({
+                where: {
+                    id: parseInt(workspaceId)
+                }
+            })
+
+            // Nếu là lớp thì gán tất cả user vào
+            if (workspace.isClass) {
+                const conversation = await prisma.conversation.findUnique({
+                    where: {
+                        id: parseInt(conversationId)
+                    },
+                    include: {
+                        user: true
+                    }
+                })
+
+                userIdsArray = conversation.user.map((user) => user.id)
+            }
+
             const data = {
                 title,
                 description,
@@ -116,6 +433,7 @@ const taskController = {
             if (deadline) {
                 data.deadline = deadline
             }
+
             const task = await prisma.task.create({
                 data
             })
@@ -163,6 +481,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -189,7 +508,7 @@ const taskController = {
     updateTask: async (req, res, next) => {
         try {
             const { workspaceId, conversationId, taskId } = req.params;
-            const { title, description, userIds, fileIds } = req.body;
+            const { title, description, userIds, fileIds, isClass } = req.body;
             let deadline = req.body.deadline
 
             const files = req.files;
@@ -230,7 +549,8 @@ const taskController = {
                                 include: {
                                     userProfile: true
                                 }
-                            }
+                            },
+                            fileSubmissions: true
                         }
                     },
                     fileAttachments: true,
@@ -238,41 +558,38 @@ const taskController = {
                 }
             })
 
-            const fileToDeleted = task.fileAttachments.filter((file) => !fileIdsArray.includes(file.id.toString()))
-
-            const filePathArray = fileToDeleted.map((file) => {
-                const v = file.url.split("/")
-                v.shift()
-                return v.join("/")
-            });
-
             // Lấy danh sách ID của user hiện tại
             const existingUsers = task.assignedUsers.map(data => data.user);
             const usersToDisconnect = existingUsers.filter(user => !userIdsArray.includes(user.id.toString())); // Xóa user cũ
             const usersToConnectIds = userIdsArray.filter(id => !existingUsers.map(data => data.id.toString()).includes(id)).filter(id => !isNaN(id)); // Thêm user mới
 
+            const dataUpdate = {
+                title,
+                deadline,
+                description,
+            }
+
+            if (!isClass) {
+                dataUpdate.assignedUsers = {
+                    deleteMany: {
+                        userId: {
+                            in: usersToDisconnect.map(data => parseInt(data.id)),
+                        }
+                    },
+                    createMany: {
+                        data: usersToConnectIds.map(id => ({
+                            userId: parseInt(id),
+                        }))
+                    }
+                }
+            }
+
+
             await prisma.task.update({
                 where: {
                     id: parseInt(taskId)
                 },
-                data: {
-                    title,
-                    deadline,
-                    description,
-                    assignedUsers: {
-                        deleteMany: {
-                            userId: {
-                                in: usersToDisconnect.map(data => parseInt(data.id)),
-                            }
-                        },
-                        // Ngắt liên kết user cũ
-                        createMany: {
-                            data: usersToConnectIds.map(id => ({
-                                userId: parseInt(id),
-                            })) // Thêm user mới
-                        }
-                    }
-                }
+                data: dataUpdate
             })
 
             // log
@@ -308,52 +625,63 @@ const taskController = {
                 })
             }
 
-            if (usersToDisconnect.length > 0) {
-                const userOldValue = usersToDisconnect.map((user) => {
-                    return {
-                        userId: user.id,
-                        fullname: user.userProfile.fullname,
-                        avatar: user.userProfile.avatar,
-                        email: user.email
-                    }
-                })
+            if (!isClass) {
 
-                await logTaskHistory({
-                    action: ActionTask.USER_UNASSIGNED,
-                    userId: parseInt(userId),
-                    oldValue: JSON.stringify(userOldValue),
-                    taskId: task.id
-                })
-            }
+                if (usersToDisconnect.length > 0) {
+                    const userOldValue = usersToDisconnect.map((user) => {
+                        return {
+                            userId: user.id,
+                            fullname: user.userProfile.fullname,
+                            avatar: user.userProfile.avatar,
+                            email: user.email
+                        }
+                    })
 
-            const usersToConnect = await prisma.user.findMany({
-                where: {
-                    id: {
-                        in: usersToConnectIds.map((id) => parseInt(id))
-                    }
-                },
-                include: {
-                    userProfile: true
+                    await logTaskHistory({
+                        action: ActionTask.USER_UNASSIGNED,
+                        userId: parseInt(userId),
+                        oldValue: JSON.stringify(userOldValue),
+                        taskId: task.id
+                    })
                 }
-            })
 
-            if (usersToConnect.length > 0) {
-                const userNewValue = usersToConnect.map((user) => {
-                    return {
-                        userId: user.id,
-                        fullname: user.userProfile.fullname,
-                        avatar: user.userProfile.avatar,
-                        email: user.email
+                const usersToConnect = await prisma.user.findMany({
+                    where: {
+                        id: {
+                            in: usersToConnectIds.map((id) => parseInt(id))
+                        }
+                    },
+                    include: {
+                        userProfile: true
                     }
                 })
 
-                await logTaskHistory({
-                    action: ActionTask.USER_ASSIGNED,
-                    userId: parseInt(userId),
-                    newValue: JSON.stringify(userNewValue),
-                    taskId: task.id
-                })
+                if (usersToConnect.length > 0) {
+                    const userNewValue = usersToConnect.map((user) => {
+                        return {
+                            userId: user.id,
+                            fullname: user.userProfile.fullname,
+                            avatar: user.userProfile.avatar,
+                            email: user.email
+                        }
+                    })
+
+                    await logTaskHistory({
+                        action: ActionTask.USER_ASSIGNED,
+                        userId: parseInt(userId),
+                        newValue: JSON.stringify(userNewValue),
+                        taskId: task.id
+                    })
+                }
             }
+
+            const fileToDeleted = task.fileAttachments.filter((file) => !fileIdsArray.includes(file.id.toString()))
+
+            const filePathArray = fileToDeleted.map((file) => {
+                const v = file.url.split("/")
+                v.shift()
+                return v.join("/")
+            });
 
             if (filePathArray.length > 0) {
                 await deleteFilesFromGCS(filePathArray, async (error, data) => {
@@ -427,6 +755,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -514,6 +843,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -532,6 +862,87 @@ const taskController = {
             })
 
             return res.status(201).json(taskAtFiles);
+
+
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+    addFilesToSubmitClass: async (req, res, next) => {
+        try {
+            const { workspaceId, conversationId, taskId } = req.params;
+            const files = req.files
+            const userId = req.payload.aud
+
+            const workspace = await prisma.workspace.findUnique({
+                where: {
+                    id: parseInt(workspaceId)
+                }
+            })
+
+            if (!workspace.isClass) return next(400, "Workspace is not class")
+
+            const userOnTask = await prisma.userOnTask.findFirst({
+                where: {
+                    taskId: parseInt(taskId),
+                    userId: parseInt(userId)
+                }
+            })
+
+            if (!userOnTask) return next(400, "User is not in task")
+
+            const destinationUpload = `conversation-${conversationId}/workspace-${workspaceId}/task-${taskId}/user-${userId}/submissions`
+
+
+            const uploadedFiles = await new Promise((resolve, reject) => {
+                uploadFilesToGCS(files, destinationUpload, (error, data) => {
+                    if (error) return reject(createError(500));
+                    resolve(data);
+                });
+            });
+
+            const userOnTaskSubmit = await prisma.userOnTask.update({
+                where: {
+                    id: userOnTask.id
+                },
+                data: {
+                    fileSubmissions: {
+                        upsert: uploadedFiles.map((file) => ({
+                            where: { id: -1, url: file.url },
+                            update: {
+                                title: file.fileName,
+                                size: parseFloat(file.size),
+                                fileType: file.fileType
+                            },
+                            create: {
+                                title: file.fileName,
+                                url: file.url,
+                                from: UploadDocumentWhere.WORKSPACE,
+                                size: parseFloat(file.size),
+                                ownerId: parseInt(userId),
+                                privacy: TypePrivacy.PRIVATE,
+                                fileType: file.fileType
+                            }
+                        }))
+                    }
+                },
+                include: {
+                    fileSubmissions: true,
+
+                }
+            })
+
+            // const fileNamesLog = uploadedFiles.map(file => file.fileName)
+
+            // await logTaskHistory({
+            //     userId: parseInt(userId),
+            //     taskId: userOnTaskSubmit.id,
+            //     action: ActionTask.FILE_SUBMITTED,
+            //     newValue: JSON.stringify(fileNamesLog)
+            // })
+
+            return res.status(201).json(userOnTaskSubmit);
 
 
         } catch (e) {
@@ -603,7 +1014,6 @@ const taskController = {
             next(createError(500))
         }
     },
-
     // Submit task -> PENDING_REVIEW
     submitTask: async (req, res, next) => {
         try {
@@ -634,6 +1044,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -649,6 +1060,58 @@ const taskController = {
                 oldValue: StatusTask.IN_PROGRESS,
                 newValue: StatusTask.PENDING_PREVIEW
             })
+
+            return res.status(201).json(taskAtFiles);
+
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+    // Submit task class -> PENDING_REVIEW
+    submitTaskClass: async (req, res, next) => {
+        try {
+            const { workspaceId, conversationId, taskId } = req.params;
+            const userId = req.payload.aud
+
+            const taskToSubmit = await prisma.userOnTask.findFirst({
+                where: {
+                    taskId: parseInt(taskId),
+                    userId: parseInt(userId),
+                }
+            })
+
+            if (!taskToSubmit) return next(createError(404, "Not found task submission"))
+
+            if (taskToSubmit.isSubmit) return next(createError(400, "Task is submitted"))
+
+            const submitedAt = new Date(Date.now())
+
+            const taskAtFiles = await prisma.userOnTask.update({
+                where: {
+                    id: taskToSubmit.id
+                },
+                data: {
+                    isSubmit: true,
+                    submitedAt
+                },
+                include: {
+                    fileSubmissions: true,
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    }
+                }
+            })
+
+            // await logTaskHistory({
+            //     userId,
+            //     taskId: taskAtFiles.id,
+            //     action: ActionTask.STATUS_CHANGED,
+            //     oldValue: StatusTask.IN_PROGRESS,
+            //     newValue: StatusTask.PENDING_PREVIEW
+            // })
 
             return res.status(201).json(taskAtFiles);
 
@@ -687,6 +1150,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -733,6 +1197,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -752,6 +1217,56 @@ const taskController = {
             })
 
             res.status(200).json(taskToPreview)
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
+    // Preview task -> FINISH, FAILDED
+    previewTaskClass: async (req, res, next) => {
+        try {
+            const { taskId } = req.params;
+            const { grade, userId } = req.body;
+            // const userId = parseInt(req.payload.aud)
+
+
+            const taskToPreview = await prisma.userOnTask.findFirst({
+                where: {
+                    taskId: parseInt(taskId),
+                    userId: parseInt(userId),
+                    isSubmit: true
+                }
+            })
+
+            if (!taskToPreview) return next(createError(404, "Not found task to preview"))
+
+            const taskUpdated = await prisma.userOnTask.update({
+                where: {
+                    id: taskToPreview.id
+                },
+                data: {
+                    grade: parseFloat(grade),
+                },
+                include: {
+                    fileSubmissions: true,
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    task: true
+                }
+            })
+
+            // await logTaskHistory({
+            //     userId,
+            //     taskId: taskToPreview.id,
+            //     action: ActionTask.STATUS_CHANGED,
+            //     oldValue: StatusTask.PENDING_PREVIEW,
+            //     newValue: status
+            // })
+
+            res.status(200).json(taskUpdated)
         } catch (e) {
             console.log(e)
             next(createError(500))
@@ -793,6 +1308,42 @@ const taskController = {
             next(createError(500))
         }
     },
+    // Remove file
+    removeFileSubmitClass: async (req, res, next) => {
+        try {
+            const { fileId } = req.body;
+            const userId = parseInt(req.payload.aud);
+            const { taskId } = req.params;
+
+            if (!fileId) return next(createError(400, "Missing fileId"))
+
+            const file = await prisma.file.findUnique({
+                where: {
+                    id: parseInt(fileId)
+                }
+            })
+
+            if (!file) return next(createError(404))
+
+            const filePath = file.url.split("/")
+            filePath.shift()
+
+            await deleteFileFromGCS(filePath.join("/"), () => { })
+
+            // await logTaskHistory({
+            //     userId,
+            //     taskId: parseInt(taskId),
+            //     action: ActionTask.FILE_REMOVED,
+            //     oldValue: file.title,
+            // })
+
+            res.status(200).json({ message: "Xóa thành công" })
+
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
     getHistories: async (req, res, next) => {
         try {
             const { taskId } = req.params;
@@ -826,20 +1377,18 @@ const taskController = {
     createAnnouncement: async (req, res, next) => {
         try {
             const { workspaceId, conversationId } = req.params;
-            const { title, content } = req.body;
+            const { content } = req.body;
             const userId = req.payload.aud;
 
             const files = req.files;
 
-            if (!title && !content) return next(createError(400, "Missing title or content"))
+            if (!content) return next(createError(400, "Missing content"))
 
             const announcement = await prisma.announcement.create({
                 data: {
-                    title,
                     content,
                     workspaceId: parseInt(workspaceId),
                     userId: parseInt(userId),
-
                 }
             })
 
@@ -897,7 +1446,7 @@ const taskController = {
     updateAnnouncement: async (req, res, next) => {
         try {
             const { workspaceId, conversationId, announcementId } = req.params;
-            const { title, content, fileIds } = req.body;
+            const { content, fileIds } = req.body;
             const userId = req.payload.aud;
 
             const files = req.files;
@@ -967,7 +1516,6 @@ const taskController = {
                     id: announcement.id
                 },
                 data: {
-                    title,
                     content,
                     files: {
                         upsert: uploadedFiles.map((file) => ({
@@ -1016,10 +1564,31 @@ const taskController = {
                     status: {
                         notIn: ["COMPLETED", "FAILED", "PENDING_PREVIEW"]
                     }
+                },
+                include: {
+                    fileSubmissions: true,
+                    fileAttachments: true,
                 }
             })
 
             if (!task) return next(createError(404, "Task not found"))
+
+            const fileToDeleted =
+                [...task.fileSubmissions.filter((file) => file.from == "WORKSPACE"), ...task.fileAttachments.filter((file) => file.from == "WORKSPACE")]
+
+
+            const filePathArray = fileToDeleted.map((file) => {
+                const v = file.url.split("/")
+                v.shift()
+                return v.join("/")
+            });
+
+            if (filePathArray.length > 0) {
+                await deleteFilesFromGCS(filePathArray, async (error, data) => {
+                    if (error) next(createError(500))
+                })
+            }
+
 
             const taskDeleted = await prisma.task.delete({
                 where: {
@@ -1042,14 +1611,41 @@ const taskController = {
             const announcement = await prisma.announcement.findFirst({
                 where: {
                     id: parseInt(announcementId),
+                },
+                include: {
+                    files: true
                 }
             })
 
             if (!announcement) return next(createError(404, "Announcement not found"))
 
+            const fileToDeleted =
+                announcement.files.filter((file) => file.from == "WORKSPACE")
+
+
+            const filePathArray = fileToDeleted.map((file) => {
+                const v = file.url.split("/")
+                v.shift()
+                return v.join("/")
+            });
+
+            if (filePathArray.length > 0) {
+                await deleteFilesFromGCS(filePathArray, async (error, data) => {
+                    if (error) next(createError(500))
+                })
+            }
+
             const announcementDeleted = await prisma.announcement.delete({
                 where: {
                     id: announcement.id
+                },
+                include: {
+                    files: true,
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
                 }
             })
 
@@ -1086,7 +1682,7 @@ const taskController = {
                 }
             })
 
-            const taskUpated = await prisma.task.update({
+            const taskUpdated = await prisma.task.update({
                 where: {
                     id: parseInt(taskId)
                 },
@@ -1105,6 +1701,7 @@ const taskController = {
                                     userProfile: true
                                 }
                             },
+                            fileSubmissions: true
                         }
                     },
                     fileSubmissions: true,
@@ -1129,13 +1726,83 @@ const taskController = {
                 oldValue: file.title,
             })
 
-            res.status(200).json(taskUpated)
+            res.status(200).json(taskUpdated)
 
         } catch (e) {
             console.log(e)
             next(createError(500))
         }
-    }
+    },
+    deleteFileSubmitClass: async (req, res, next) => {
+        try {
+            const { taskId } = req.params;
+            const { fileId } = req.body;
+            const userId = req.payload.aud;
+
+            const task = await prisma.userOnTask.findFirst({
+                where: {
+                    taskId: parseInt(taskId),
+                    userId: parseInt(userId),
+                    fileSubmissions: {
+                        some: {
+                            id: parseInt(fileId)
+                        }
+                    }
+                }
+            })
+
+            if (!task) return next(createError(404, "File not found in task"))
+
+            const file = await prisma.file.findUnique({
+                where: {
+                    id: parseInt(fileId)
+                }
+            })
+
+            const taskUpdated = await prisma.userOnTask.update({
+                where: {
+                    id: parseInt(task.id)
+                },
+                data: {
+                    fileSubmissions: {
+                        disconnect: {
+                            id: file.id
+                        }
+                    }
+                },
+                include: {
+                    user: {
+                        include: {
+                            userProfile: true
+                        }
+                    },
+                    fileSubmissions: true,
+                }
+
+            })
+
+            if (file.from == "WORKSPACE") {
+                const filePath = file.url.split("/")
+                filePath.shift()
+
+                await deleteFileFromGCS(filePath.join("/"), () => { })
+
+            }
+
+            // await logTaskHistory({
+            //     userId,
+            //     taskId: parseInt(taskId),
+            //     action: ActionTask.FILE_REMOVED,
+            //     oldValue: file.title,
+            // })
+
+            res.status(200).json(taskUpdated)
+
+        } catch (e) {
+            console.log(e)
+            next(createError(500))
+        }
+    },
 }
 
 module.exports = taskController

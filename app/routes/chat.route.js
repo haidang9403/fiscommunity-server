@@ -12,6 +12,7 @@ const chatRoute = express.Router();
 chatRoute.get("/conversation", verifyAccessToken, chatController.getConversation)
 chatRoute.get("/conversation/:conversationId/one", verifyAccessToken, chatController.getOneConversation)
 chatRoute.get("/info/conversation", verifyAccessToken, chatController.getInfoConversation)
+chatRoute.get("/admin/conversation", verifyAccessToken, chatController.getConversationAdmin)
 
 chatRoute.get("/conversation/:conversationId", verifyAccessToken, chatController.getMessages)
 chatRoute.get("/conversation/:conversationId/media", verifyAccessToken, chatController.getMessageMedia)

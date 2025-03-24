@@ -16,7 +16,13 @@ const authController = {
                 where: {
                     email: loginUser.email,
                 },
-                include: {
+                select: {
+                    password: true,
+                    id: true,
+                    email: true,
+                    phone: true,
+                    totalStorage: true,
+                    limitStorage: true,
                     userProfile: true
                 }
             })
@@ -50,7 +56,7 @@ const authController = {
             const existUser = await prisma.user.findUnique({
                 where: {
                     email: registerUser.email,
-                }
+                },
             });
 
             if (existUser) {

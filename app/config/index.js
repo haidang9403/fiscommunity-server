@@ -32,6 +32,16 @@ const config = {
         api_secret: process.env.LIVEKIT_SECRET,
         // eslint-disable-next-line no-undef
         url: process.env.LIVEKIT_URL
+    },
+    n8n: {
+        // eslint-disable-next-line no-undef
+        url: process.env.AI_AGENT_URL
+    },
+    onlyOffice: {
+        // eslint-disable-next-line no-undef
+        secret_key: process.env.ONLYOFFICE_SECRET,
+        // eslint-disable-next-line no-undef
+        callback_url_edit: process.env.ONLYOFFICE_CALLBACK_URL_EDIT,
     }
 }
 

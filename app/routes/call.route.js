@@ -10,4 +10,6 @@ callRoute.post("/call/join-room", verifyAccessToken, callController.joinRoom);
 // ------ API Get list active room --------- //
 callRoute.get("/call/list-active-room", verifyAccessToken, callController.getRoom);
 
+callRoute.post("/call/disconnect-room", verifyAccessToken, callController.disconnectRoom);
+
 module.exports = callRoute;
