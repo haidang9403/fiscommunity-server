@@ -396,6 +396,19 @@ const taskController = {
 
             if (deadline == "null") deadline = null
 
+
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                }
+            })
+
+            const totalSizeCheck = files.reduce((total, file) => total + file.size, 0)
+
+            if (totalSizeCheck + conversation.totalStorage > conversation.limitStorage) {
+                return next(createError(400, "No free space to upload"))
+            }
+
             const workspace = await prisma.workspace.findUnique({
                 where: {
                     id: parseInt(workspaceId)
@@ -446,6 +459,22 @@ const taskController = {
                     resolve(data);
                 });
             });
+
+            const totalSize = uploadedFiles.reduce((total, file) => {
+                total += file.size
+                return total
+            }, 0)
+
+            const conversationUpdate = await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        increment: parseFloat(totalSize)
+                    }
+                }
+            })
 
             const taskAtFiles = await prisma.task.update({
                 where: {
@@ -557,6 +586,31 @@ const taskController = {
                     fileSubmissions: true,
                 }
             })
+
+            const fileToDeleted = task.fileAttachments.filter((file) => !fileIdsArray.includes(file.id.toString()))
+
+            const sizeRemove = fileToDeleted.reduce((total, file) => {
+                if (file.from == "WORKSPACE") {
+                    return total + file.size
+                }
+
+                return total
+            }, 0)
+
+            const sizeAdd = files.reduce((total, file) => {
+
+                return total + file.size
+            }, 0)
+
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                }
+            })
+
+            if (conversation.totalStorage + sizeAdd - sizeRemove > conversation.limitStorage) {
+                return next(createError(400, "No free space to upload"))
+            }
 
             // Lấy danh sách ID của user hiện tại
             const existingUsers = task.assignedUsers.map(data => data.user);
@@ -675,7 +729,7 @@ const taskController = {
                 }
             }
 
-            const fileToDeleted = task.fileAttachments.filter((file) => !fileIdsArray.includes(file.id.toString()))
+
 
             const filePathArray = fileToDeleted.map((file) => {
                 const v = file.url.split("/")
@@ -698,6 +752,24 @@ const taskController = {
                                         in: fileToDeleted.map((file) => file.id)
                                     }
                                 }
+                            }
+                        }
+                    })
+
+                    const totalSize = fileToDeleted.reduce((total, file) => {
+                        if (file.from == "WORKSPACE") {
+                            return total + file.size
+                        }
+                        return total
+                    }, 0)
+
+                    await prisma.conversation.update({
+                        where: {
+                            id: parseInt(conversationId)
+                        },
+                        data: {
+                            totalStorage: {
+                                decrement: totalSize
                             }
                         }
                     })
@@ -767,6 +839,19 @@ const taskController = {
             if (uploadedFiles.length > 0) {
                 const fileNames = uploadedFiles.map(file => file.fileName)
 
+                const totalSize = uploadedFiles.reduce((total, file) => total + file.size, 0)
+
+                await prisma.conversation.update({
+                    where: {
+                        id: parseInt(conversationId)
+                    },
+                    data: {
+                        totalStorage: {
+                            increment: parseFloat(totalSize)
+                        }
+                    }
+                })
+
                 await logTaskHistory({
                     action: ActionTask.FILE_ATTACHED,
                     newValue: JSON.stringify(fileNames),
@@ -800,6 +885,17 @@ const taskController = {
 
             const destinationUpload = `conversation-${conversationId}/workspace-${workspaceId}/task-${taskId}/submissions`
 
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                }
+            })
+
+            const totalSize = files.reduce((total, file) => total + file.size, 0)
+
+            if (totalSize + conversation.totalStorage > conversation.limitStorage) {
+                return next(createError(400, "No free space to upload"))
+            }
 
             const uploadedFiles = await new Promise((resolve, reject) => {
                 uploadFilesToGCS(files, destinationUpload, (error, data) => {
@@ -854,6 +950,17 @@ const taskController = {
 
             const fileNamesLog = uploadedFiles.map(file => file.fileName)
 
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        increment: parseFloat(totalSize)
+                    }
+                }
+            })
+
             await logTaskHistory({
                 userId: parseInt(userId),
                 taskId: taskAtFiles.id,
@@ -894,6 +1001,17 @@ const taskController = {
 
             const destinationUpload = `conversation-${conversationId}/workspace-${workspaceId}/task-${taskId}/user-${userId}/submissions`
 
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                }
+            })
+
+            const totalSize = files.reduce((total, file) => total + file.size, 0)
+
+            if (totalSize + conversation.totalStorage > conversation.limitStorage) {
+                return next(createError(400, "No free space to upload"))
+            }
 
             const uploadedFiles = await new Promise((resolve, reject) => {
                 uploadFilesToGCS(files, destinationUpload, (error, data) => {
@@ -941,6 +1059,17 @@ const taskController = {
             //     action: ActionTask.FILE_SUBMITTED,
             //     newValue: JSON.stringify(fileNamesLog)
             // })
+
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        increment: parseFloat(totalSize)
+                    }
+                }
+            })
 
             return res.status(201).json(userOnTaskSubmit);
 
@@ -1277,7 +1406,7 @@ const taskController = {
         try {
             const { fileId } = req.body;
             const userId = parseInt(req.payload.aud);
-            const { taskId } = req.params;
+            const { taskId, conversationId } = req.params;
 
             if (!fileId) return next(createError(400, "Missing fileId"))
 
@@ -1289,10 +1418,23 @@ const taskController = {
 
             if (!file) return next(createError(404))
 
+            const totalSize = file.size
+
             const filePath = file.url.split("/")
             filePath.shift()
 
             await deleteFileFromGCS(filePath.join("/"), () => { })
+
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        decrement: parseFloat(totalSize)
+                    }
+                }
+            })
 
             await logTaskHistory({
                 userId,
@@ -1313,7 +1455,7 @@ const taskController = {
         try {
             const { fileId } = req.body;
             const userId = parseInt(req.payload.aud);
-            const { taskId } = req.params;
+            const { taskId, conversationId } = req.params;
 
             if (!fileId) return next(createError(400, "Missing fileId"))
 
@@ -1329,6 +1471,17 @@ const taskController = {
             filePath.shift()
 
             await deleteFileFromGCS(filePath.join("/"), () => { })
+
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        decrement: parseFloat(file.size)
+                    }
+                }
+            })
 
             // await logTaskHistory({
             //     userId,
@@ -1384,6 +1537,18 @@ const taskController = {
 
             if (!content) return next(createError(400, "Missing content"))
 
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                }
+            })
+
+            const totalSizeCheck = files.reduce((total, file) => total + file.size, 0)
+
+            if (totalSizeCheck + conversation.totalStorage > conversation.limitStorage) {
+                return next(createError(400, "No free space to upload"))
+            }
+
             const announcement = await prisma.announcement.create({
                 data: {
                     content,
@@ -1437,6 +1602,17 @@ const taskController = {
                 }
             });
 
+            await prisma.conversation.update({
+                where: {
+                    id: conversation.id
+                },
+                data: {
+                    totalStorage: {
+                        increment: totalSizeCheck
+                    }
+                }
+            })
+
             res.status(200).json(announcementAtFiles)
         } catch (e) {
             console.log(e)
@@ -1474,6 +1650,31 @@ const taskController = {
             })
 
             const fileToDeleted = announcement.files.filter((file) => !fileIdsArray.includes(file.id.toString()))
+
+            const sizeRemove = fileToDeleted.reduce((total, file) => {
+                if (file.from == "WORKSPACE") {
+                    return total + file.size
+                }
+
+                return total
+            }, 0)
+
+            const sizeAdd = files.reduce((total, file) => {
+
+                return total + file.size
+            }, 0)
+
+            const conversation = await prisma.conversation.findUnique({
+                where: {
+                    id: parseInt(conversationId)
+                }
+            })
+
+            if (conversation.totalStorage + sizeAdd - sizeRemove > conversation.limitStorage) {
+                return next(createError(400, "No free space to upload"))
+            }
+
+            // const fileToDeleted = announcement.files.filter((file) => !fileIdsArray.includes(file.id.toString()))
 
             const filePathArray = fileToDeleted.map((file) => {
                 const v = file.url.split("/")
@@ -1548,6 +1749,15 @@ const taskController = {
                 }
             });
 
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: conversation.totalStorage + sizeAdd - sizeRemove
+                }
+            })
+
             res.status(200).json(announcementAtFiles)
         } catch (e) {
             console.log(e)
@@ -1556,7 +1766,7 @@ const taskController = {
     },
     deleteTask: async (req, res, next) => {
         try {
-            const { taskId } = req.params;
+            const { taskId, conversationId } = req.params;
 
             const task = await prisma.task.findFirst({
                 where: {
@@ -1596,6 +1806,19 @@ const taskController = {
                 }
             })
 
+            const totalSize = fileToDeleted.reduce((total, file) => total + file.size, 0)
+
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        decrement: totalSize
+                    }
+                }
+            })
+
             if (!taskDeleted) return next(createError(500, "Error when deleting task"))
 
             return res.status(200).json(taskDeleted)
@@ -1606,7 +1829,7 @@ const taskController = {
     },
     deleteAnnouncement: async (req, res, next) => {
         try {
-            const { announcementId } = req.params;
+            const { announcementId, conversationId } = req.params;
 
             const announcement = await prisma.announcement.findFirst({
                 where: {
@@ -1651,6 +1874,19 @@ const taskController = {
 
             if (!announcementDeleted) return next(createError(500, "Error when deleting announcement"))
 
+            const totalSize = fileToDeleted.reduce((total, file) => total + file.size, 0)
+
+            await prisma.conversation.update({
+                where: {
+                    id: parseInt(conversationId)
+                },
+                data: {
+                    totalStorage: {
+                        decrement: totalSize
+                    }
+                }
+            })
+
             return res.status(200).json(announcementDeleted)
         } catch (e) {
             console.log(e)
@@ -1659,7 +1895,7 @@ const taskController = {
     },
     deleteFileSubmit: async (req, res, next) => {
         try {
-            const { taskId } = req.params;
+            const { taskId, conversationId } = req.params;
             const { fileId } = req.body;
             const userId = req.payload.aud;
 
@@ -1712,8 +1948,20 @@ const taskController = {
             })
 
             if (file.from == "WORKSPACE") {
+
                 const filePath = file.url.split("/")
                 filePath.shift()
+
+                await prisma.conversation.update({
+                    where: {
+                        id: parseInt(conversationId)
+                    },
+                    data: {
+                        totalStorage: {
+                            decrement: file.size
+                        }
+                    }
+                })
 
                 await deleteFileFromGCS(filePath.join("/"), () => { })
 
@@ -1735,7 +1983,7 @@ const taskController = {
     },
     deleteFileSubmitClass: async (req, res, next) => {
         try {
-            const { taskId } = req.params;
+            const { taskId, conversationId } = req.params;
             const { fileId } = req.body;
             const userId = req.payload.aud;
 
@@ -1784,6 +2032,17 @@ const taskController = {
             if (file.from == "WORKSPACE") {
                 const filePath = file.url.split("/")
                 filePath.shift()
+
+                await prisma.conversation.update({
+                    where: {
+                        id: parseInt(conversationId)
+                    },
+                    data: {
+                        totalStorage: {
+                            decrement: file.size
+                        }
+                    }
+                })
 
                 await deleteFileFromGCS(filePath.join("/"), () => { })
 

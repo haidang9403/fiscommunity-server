@@ -31,7 +31,7 @@ const chatController = {
             })
 
             res.status(200).json(user.adminConversations)
-        } catch(e){
+        } catch (e) {
             console.log(e)
             next(createError(500))
         }
@@ -144,10 +144,85 @@ const chatController = {
                 take: 100
             });
 
+            let workspaces;
+            if (conversation.isGroup) {
+                const workspaceFetchs = await prisma.workspace.findMany({
+                    where: {
+                        conversationId: conversation.id
+                    },
+                    include: {
+                        announcements: {
+                            include: {
+                                files: true,
+                            }
+                        },
+                        tasks: {
+                            include: {
+                                fileAttachments: true,
+                                fileSubmissions: true,
+                                assignedUsers: {
+                                    include: {
+                                        fileSubmissions: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+
+                workspaces = workspaceFetchs.map((workspace) => {
+                    const storageAnnouncements = workspace.announcements.reduce((total, item) => {
+                        let totalStore
+                        for (const file of item.files) {
+                            if (file.from == "WORKSPACE") {
+                                totalStore += file.size
+                            }
+                        }
+                        total += totalStore
+                    }, 0)
+
+                    const storageTasks = workspace.tasks.reduce((total, item) => {
+                        let totalStore;
+                        for (const file of item.fileAttachments) {
+                            if (file.from == "WORKSPACE") {
+                                totalStore += file.size
+                            }
+                        }
+
+                        for (const file of item.fileSubmissions) {
+                            if (file.from == "WORKSPACE") {
+                                totalStore += file.size
+                            }
+                        }
+
+                        const fileSubmissionsUsers = item.assignedUsers.map(userAssign => {
+                            const fileSubmissions = userAssign.fileSubmissions.filter(file => file.from === "WORKSPACE")
+                            return fileSubmissions
+                        })
+
+                        for (const userFileSubmission of fileSubmissionsUsers) {
+                            for (const file of userFileSubmission)
+                                if (file.from == "WORKSPACE") {
+                                    totalStore += file.size
+                                }
+                        }
+
+                        total += totalStore
+                    }, 0)
+
+                    return {
+                        id: workspace.id,
+                        name: workspace.name,
+                        storage: storageAnnouncements + storageTasks
+                    }
+                })
+            }
+
             res.status(200).json({
                 ...conversation,
                 amountUnSeen: unSeenMessageCount,
-                stateBlock
+                stateBlock,
+                workspaces
             });
         } catch (e) {
             console.log(e)
@@ -395,10 +470,88 @@ const chatController = {
                         }
                     });
 
+                    let workspaces;
+                    if (conversation.isGroup) {
+                        const workspaceFetchs = await prisma.workspace.findMany({
+                            where: {
+                                conversationId: conversation.id
+                            },
+                            include: {
+                                announcements: {
+                                    include: {
+                                        files: true,
+                                    }
+                                },
+                                tasks: {
+                                    include: {
+                                        fileAttachments: true,
+                                        fileSubmissions: true,
+                                        assignedUsers: {
+                                            include: {
+                                                fileSubmissions: true
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        })
+
+                        workspaces = workspaceFetchs.map((workspace) => {
+                            const storageAnnouncements = workspace.announcements.reduce((total, item) => {
+                                let totalStore = 0
+                                for (const file of item.files) {
+                                    if (file.from == "WORKSPACE") {
+                                        totalStore += file.size
+                                    }
+                                }
+                                total += totalStore
+                                return total
+                            }, 0)
+
+                            const storageTasks = workspace.tasks.reduce((total, item) => {
+                                let totalStore = 0
+                                for (const file of item.fileAttachments) {
+                                    if (file.from == "WORKSPACE") {
+                                        totalStore += file.size
+                                    }
+                                }
+
+                                for (const file of item.fileSubmissions) {
+                                    if (file.from == "WORKSPACE") {
+                                        totalStore += file.size
+                                    }
+                                }
+
+                                const fileSubmissionsUsers = item.assignedUsers.map(userAssign => {
+                                    const fileSubmissions = userAssign.fileSubmissions.filter(file => file.from === "WORKSPACE")
+                                    return fileSubmissions
+                                })
+
+                                for (const userFileSubmission of fileSubmissionsUsers) {
+                                    for (const file of userFileSubmission)
+                                        if (file.from == "WORKSPACE") {
+                                            totalStore += file.size
+                                        }
+                                }
+
+                                total += totalStore
+                                return total
+                            }, 0)
+
+                            return {
+                                id: workspace.id,
+                                name: workspace.name,
+                                storage: storageAnnouncements + storageTasks
+                            }
+                        })
+                    }
+
+
                     return {
                         ...conversation,
                         amountUnSeen: unSeenMessageCount,
-                        stateBlock
+                        stateBlock,
+                        workspaces
                     };
                 })
             );
@@ -1038,7 +1191,7 @@ const chatController = {
 
                 const messageSaved = await newMessage.save();
 
-                const size = (file.size / (1024 * 1024)).toFixed(4)
+                const size = file.size
 
                 if (parseFloat(conversation.totalStorage) + parseFloat(size) > parseFloat(conversation.limitStorage)) {
                     let result;
@@ -1195,7 +1348,7 @@ const chatController = {
 
                 const messageSaved = await newMessage.save();
 
-                const size = (folderSaved.size / (1024 * 1024)).toFixed(4)
+                const size = folderSaved.size;
 
                 if (parseFloat(conversation.totalStorage) + parseFloat(size) > parseFloat(conversation.limitStorage)) {
                     let result;
@@ -1315,19 +1468,26 @@ const chatController = {
 
                     await File.delete(document.id);
 
+                    await prisma.message.delete({
+                        where: {
+                            id: parseInt(message.id)
+                        },
+                    })
+
                     // Update size when deleting success
-                    await Conversation.model.update({
+                    const conversationUpdate = await Conversation.model.update({
                         where: {
                             id: parseInt(conversationId)
                         },
                         data: {
-                            totalStorage: parseFloat((parseFloat(conversation.totalStorage) - parseFloat(document.size)).toFixed(4))
+                            totalStorage: parseFloat(conversation.totalStorage) - parseFloat(document.size)
                         }
                     })
 
                     return res.status(result.statusCode).send({
                         success: result.success,
                         message: result.message,
+                        conversation: conversationUpdate
                     });
                 })
             } else if (message.type == TypeMessage.FOLDER) {
@@ -1340,7 +1500,7 @@ const chatController = {
                     await Folder.delete(document.id);
 
                     // Update size when deleting success
-                    await Conversation.model.update({
+                    const conversationUpdate = await Conversation.model.update({
                         where: {
                             id: parseInt(conversationId)
                         },
@@ -1349,9 +1509,16 @@ const chatController = {
                         }
                     })
 
+                    await prisma.message.delete({
+                        where: {
+                            id: parseInt(message.id)
+                        },
+                    })
+
                     return res.status(result.statusCode).send({
                         success: result.success,
                         message: result.message,
+                        conversation: conversationUpdate
                     });
                 })
             }
@@ -1373,6 +1540,7 @@ const chatController = {
             })
 
             if (!message) return next(createError(404, "Message not found"))
+
             if (message.type == TypeMessage.FILE || message.type == TypeMessage.FOLDER) {
                 return next(createError(400, "This message just hard delete"))
             }
@@ -1414,9 +1582,6 @@ const chatController = {
                 },
                 data: {
                     type: TypeMessage.UN_SEND,
-                    folderId: null,
-                    fileId: null,
-                    postId: null,
                 }
             })
 
@@ -1529,10 +1694,88 @@ const chatController = {
                 io.to(`user_${other.id}`).emit("seenMessage", userEmit)
             })
 
+            let workspaces;
+            if (conversation.isGroup) {
+                const workspaceFetchs = await prisma.workspace.findMany({
+                    where: {
+                        conversationId: conversation.id
+                    },
+                    include: {
+                        announcements: {
+                            include: {
+                                files: true,
+                            }
+                        },
+                        tasks: {
+                            include: {
+                                fileAttachments: true,
+                                fileSubmissions: true,
+                                assignedUsers: {
+                                    include: {
+                                        fileSubmissions: true
+                                    }
+                                }
+                            }
+                        }
+                    }
+                })
+
+                workspaces = workspaceFetchs.map((workspace) => {
+                    const storageAnnouncements = workspace.announcements.reduce((total, item) => {
+                        let totalStore = 0
+                        for (const file of item.files) {
+                            if (file.from == "WORKSPACE") {
+                                totalStore += file.size
+                            }
+                        }
+                        total += totalStore
+                        return total
+
+                    }, 0)
+
+                    const storageTasks = workspace.tasks.reduce((total, item) => {
+                        let totalStore = 0;
+                        for (const file of item.fileAttachments) {
+                            if (file.from == "WORKSPACE") {
+                                totalStore += file.size
+                            }
+                        }
+
+                        for (const file of item.fileSubmissions) {
+                            if (file.from == "WORKSPACE") {
+                                totalStore += file.size
+                            }
+                        }
+
+                        const fileSubmissionsUsers = item.assignedUsers.map(userAssign => {
+                            const fileSubmissions = userAssign.fileSubmissions.filter(file => file.from === "WORKSPACE")
+                            return fileSubmissions
+                        })
+
+                        for (const userFileSubmission of fileSubmissionsUsers) {
+                            for (const file of userFileSubmission)
+                                if (file.from == "WORKSPACE") {
+                                    totalStore += file.size
+                                }
+                        }
+
+                        total += totalStore
+                        return total
+                    }, 0)
+
+                    return {
+                        id: workspace.id,
+                        name: workspace.name,
+                        storage: storageAnnouncements + storageTasks
+                    }
+                })
+            }
+
             res.status(200).json({
                 ...conversation,
                 amountUnSeen: 0,
-                stateBlock
+                stateBlock,
+                workspaces
             })
         } catch (e) {
             console.log(e)

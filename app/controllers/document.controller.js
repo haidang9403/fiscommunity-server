@@ -16,6 +16,130 @@ const UserAttendGroup = require("../models/groups/user.attend.group.model");
 const { getStateRelation } = require("../utils/helper.util");
 const { accessSync } = require("fs");
 const { updateFile, updateFileGCS, updateFolderGCS } = require("../utils/googleCloundStorage/update.util");
+const { format } = require("util");
+const { title } = require("process");
+
+
+async function updateFolderSizes(files, folders) {
+    const folderSizeMap = new Map();
+
+    // Tính tổng size của mỗi folder
+    for (const file of files) {
+        folderSizeMap.set(file.folderId, (folderSizeMap.get(file.folderId) || 0) + file.size);
+    }
+
+    // Tìm tất cả thư mục cha để xử lý
+    let folderQueue = [...folderSizeMap.keys()];
+
+    for (const folder of folders) {
+        if (!folderQueue.includes(folder.id)) {
+            folderSizeMap.set(folder.id, 0);
+            folderQueue.push(folder.id)
+        }
+    }
+
+    while (folderQueue.length > 0) {
+        const folders = await prisma.folder.findMany({
+            where: { id: { in: folderQueue } },
+            select: { id: true, parentFolderId: true, title: true, parentFolder: true },
+            orderBy: {
+                id: "desc"
+            }
+        });
+
+        folderQueue = [];
+        for (const folder of folders) {
+            if (folder.parentFolderId) {
+
+
+                folderSizeMap.set(
+                    folder.parentFolderId,
+                    (folderSizeMap.get(folder.parentFolderId) || 0) + (folderSizeMap.get(folder.id) || 0)
+                );
+
+
+            }
+        }
+    }
+
+    // Cập nhật size cho tất cả folder
+    const updatePromises = [];
+    for (const [folderId, size] of folderSizeMap) {
+        updatePromises.push(
+            prisma.folder.update({
+                where: { id: folderId },
+                data: { size: { increment: size } } // Dùng `increment` để tránh ghi đè size
+            })
+        );
+    }
+
+    await Promise.all(updatePromises);
+}
+
+async function clearFolderContent(folder) {
+    // Giả sử folder.url được lưu dạng "bucketName/destFolder/subFolderName"
+    // Lấy prefix trên GCS: phần sau dấu "/"
+
+    const prefix = folder.url.split(`${bucket.name}/`)[1];
+
+    try {
+        // 1. Xóa tất cả file trên GCS có prefix trùng với folder.url
+        await bucket.deleteFiles({ prefix });
+    } catch (error) {
+        console.error("Error deleting files on GCS for prefix:", prefix, error);
+        // Tùy vào logic, bạn có thể quyết định throw error hoặc tiếp tục
+    }
+
+    // Xóa folder hiện tại (cascade sẽ xóa hết các file và folder con)
+    await prisma.folder.delete({
+        where: { id: folder.id }
+    });
+
+    // Tạo lại folder mới với thông tin giống folder ban đầu, size = 0
+    const newFolder = await prisma.folder.create({
+        data: {
+            title: folder.title,
+            ownerId: folder.ownerId,
+            parentFolderId: folder.parentFolderId, // giữ nguyên folder cha nếu có
+            url: folder.url, // giữ nguyên URL (theo cấu trúc GCS)
+            size: 0,
+            privacy: folder.privacy,
+            groupId: folder.groupId,
+            from: folder.from
+        }
+    });
+
+    if (folder.from == "GROUP") {
+        await prisma.group.update({
+            where: {
+                id: folder.groupId
+            },
+            data: {
+                totalStorage: {
+                    decrement: folder.size
+                }
+            }
+        })
+    } else if (folder.from == "USER") {
+        await prisma.user.update({
+            where: {
+                id: folder.ownerId
+            },
+            data: {
+                totalStorage: {
+                    decrement: folder.size
+                }
+            }
+        })
+    } else if (folder.from == "MESSAGE") {
+        //
+    }
+
+    return newFolder;
+}
+
+
+
 
 
 module.exports = {
@@ -101,6 +225,36 @@ module.exports = {
 
                 await newFile.save();
 
+                let totalStorage
+
+                if (groupId) {
+                    const groupUpdate = await prisma.group.update({
+                        where: {
+                            id: parseInt(groupId)
+                        },
+                        data: {
+                            totalStorage: {
+                                increment: parseFloat(result.size)
+                            }
+                        }
+                    })
+
+                    totalStorage = groupUpdate.totalStorage
+                } else {
+                    const userUpdate = await prisma.user.update({
+                        where: {
+                            id: parseInt(userId)
+                        },
+                        data: {
+                            totalStorage: {
+                                increment: parseFloat(result.size)
+                            }
+                        }
+                    })
+
+                    totalStorage = userUpdate.totalStorage
+                }
+
 
 
                 // Trả về URL công khai của file đã tải lên
@@ -108,6 +262,7 @@ module.exports = {
                     success: true,
                     message: 'Tải file lên thành công!',
                     result,
+                    totalStorage
                 });
             })
 
@@ -121,165 +276,247 @@ module.exports = {
         try {
             const userId = req.payload.aud;
             const files = req.files;
+            const paths = req.body.paths;
+            const idUpdate = req.body.idUpdate;
 
-            const replace = req.body.replace == 'false' ? false : true;
+            const replace = req.body.replace !== "false";
             const parentFolderId = parseInt(req.body.parentFolderId);
             let from = req.body.from ?? UploadDocumentWhere.USER;
             const groupId = req.params.groupId ? parseInt(req.params.groupId) : null;
             let privacy = req.body.privacy;
-            if (!files) {
-                return next(400, "No file uploaded.");
+
+            const totalSizes = files.reduce((sum, file) => sum + (parseFloat(file.size) || 0), 0);
+
+            const user = await prisma.user.findUnique({
+                where: {
+                    id: parseInt(userId)
+                }
+            })
+
+            if (totalSizes + user.totalStorage > user.limitStorage) {
+                return next(createError(400, "No space to upload"))
             }
 
             let destUserFolder = `user-${userId}`;
-
-            // If groupId exist
             if (groupId) {
-                const group = await Group.model.findUnique({
-                    where: {
-                        id: parseInt(groupId)
-                    }
-                })
-
+                const group = await Group.model.findUnique({ where: { id: groupId } });
                 if (group) {
-                    privacy = TypePrivacy.PRIVATE_GROUP
-                    destUserFolder = `group-${group.id}/user-${userId}`
-                    from = UploadDocumentWhere.GROUP
+                    privacy = TypePrivacy.PRIVATE_GROUP;
+                    destUserFolder = `group-${group.id}/user-${userId}`;
+                    from = UploadDocumentWhere.GROUP;
                 }
             }
 
-            const folder = req.body.folder;
-            if (!folder) throw createError(400, "No folder to upload");
+            const targetFolder = req.body.folder;
+            if (!targetFolder) throw createError(400, "No folder to upload");
 
             if (parentFolderId) {
                 const parentFolder = await Folder.get(parentFolderId);
-                if (parentFolder) {
-                    if (parentFolder.ownerId !== parseInt(userId)) {
-                        return next(createError(403, "You do not have permission to delete this file"))
-                    }
-
-
-                    if (parentFolder.from == UploadDocumentWhere.MESSAGE) {
-                        return next(createError(400, "Folder not valid to upload"))
-                    }
-
-                    if (parentFolder.from == UploadDocumentWhere.GROUP && !groupId) {
-                        return next(createError(400, "Folder not valid to upload"))
-                    }
-
-                    if (groupId) {
-                        if (parentFolder.groupId != groupId) {
-                            return next(createError(404, "Folder not exist in group"))
-                        }
-                    }
-                } else {
-                    return next(createError(404, "Folder not exist"))
+                if (!parentFolder) return next(createError(404, "Folder not exist"));
+                if (parentFolder.ownerId !== parseInt(userId)) {
+                    return next(createError(403, "You do not have permission to delete this file"));
+                }
+                if (parentFolder.from === UploadDocumentWhere.MESSAGE ||
+                    (parentFolder.from === UploadDocumentWhere.GROUP && !groupId) ||
+                    (groupId && parentFolder.groupId !== groupId)) {
+                    return next(createError(400, "Folder not valid to upload"));
                 }
             }
 
+            // Kiểm tra folder đã tồn tại trong DB (theo parentFolderId)
+            let folder = targetFolder;
+            const existingTargetFolder = await prisma.folder.findFirst({
+                where: { title: folder, parentFolderId: parentFolderId, ownerId: parseInt(userId) }
+            });
 
-            let fullPathParentFolder;
-            if (parentFolderId) {
-                fullPathParentFolder = await Folder.getFullPathFolder(parentFolderId) + "/"
-            }
-
-            const destFolder = `${destUserFolder}/${fullPathParentFolder ?? ""}${folder}`
-            console.log(replace)
-
-            uploadFolderToGCS(files, destFolder, { replace }, async (err, { results, folder }) => {
-                if (err) {
-                    console.log(err)
-                    return next(createError(500, "Error when uploading folder"))
-                }
-
-                const newFolder = new Folder({
-                    title: folder.folderName,
-                    url: folder.url,
-                    size: parseFloat(folder.size),
-                    ownerId: userId,
-                    parentFolderId,
-                    from,
-                    groupId,
-                    privacy
-                });
-
+            if (existingTargetFolder) {
                 if (replace) {
-                    const replaceFolder = await prisma.folder.findFirst({
-                        where: {
-                            title: folder.folderName,
-                            parentFolderId,
-                            ownerId: parseInt(userId),
-                            groupId
-                        }
-                    })
+                    // Nếu replace = true, xóa toàn bộ nội dung folder cũ (trên GCS & DB)
+                    await clearFolderContent(existingTargetFolder); // Bạn tự định nghĩa hàm này theo logic của hệ thống
+                    folder = targetFolder; // Dùng lại tên cũ
+                } else {
+                    // Nếu replace = false, tạo tên mới cho folder
+                    let newFolderName = folder + " - Copy";
+                    let counter = 1;
+                    while (await prisma.folder.findFirst({
+                        where: { title: newFolderName, parentFolderId: parentFolderId, ownerId: parseInt(userId) }
+                    })) {
+                        newFolderName = `${folder} - Copy (${counter++})`;
+                    }
+                    folder = newFolderName;
+                }
+            }
 
-                    if (replaceFolder) {
-                        newFolder.updateId(replaceFolder.id);
+            let fullPathParentFolder = parentFolderId ? await Folder.getFullPathFolder(parentFolderId) + "/" : "";
+            const destFolder = `${destUserFolder}/${fullPathParentFolder}${folder}`.split("/").slice(0, -1).join("/");
 
-                        await newFolder.deleteAllFiles();
+            const filesWithPaths = files.map((file, index) => {
+                let originalPath = Array.isArray(paths) ? paths[index] : paths;
+                // Tách các phần của đường dẫn theo dấu "/"
+                let pathParts = originalPath.split('/');
+                // Nếu có ít nhất một phần, thay thế phần đầu bằng newFolderName
+                if (pathParts.length > 0) {
+                    pathParts[0] = folder;
+                }
+                return {
+                    ...file,
+                    webkitRelativePath: pathParts.join('/')
+                };
+            });
 
+            // **Tạo folder nếu chưa tồn tại**
+            const folderMap = new Map();
+            for (const file of filesWithPaths) {
+                const { webkitRelativePath } = file;
+                if (!webkitRelativePath) continue;
+                const folderPath = path.dirname(webkitRelativePath);
+                if (folderPath !== ".") folderMap.set(folderPath, null);
+            }
 
-                        results.forEach(async (result) => {
-                            await prisma.file.create({
-                                data: {
-                                    title: result.fileName,
-                                    url: result.url,
-                                    size: parseFloat(result.size),
-                                    from,
-                                    ownerId: userId,
-                                    groupId,
-                                    folderId: replaceFolder.id
-                                }
-                            })
-                        })
+            const sortedFolders = [...folderMap.keys()].sort();
 
-                        await newFolder.save()
-                    } else {
-                        const temp = await newFolder.save();
+            // console.log(sortedFolders)
 
+            const folderIds = new Map();
+            const foldersToCalSize = []
+            for (const folderPath of sortedFolders) {
+                const pathParts = folderPath.split("/");
+                let currentParentId = parentFolderId;
 
-                        results.forEach(async (result) => {
-                            await prisma.file.create({
-                                data: {
-                                    title: result.fileName,
-                                    url: result.url,
-                                    size: parseFloat(result.size),
-                                    from,
-                                    ownerId: userId,
-                                    groupId,
-                                    folderId: temp.id
-                                }
-                            })
-                        })
+                for (let i = 0; i < pathParts.length; i++) {
+                    const currentPath = pathParts.slice(0, i + 1).join("/");
+
+                    if (folderIds.has(currentPath)) {
+                        currentParentId = folderIds.get(currentPath);
+                        continue;
                     }
 
-                } else {
-                    const temp = await newFolder.save();
+                    let existingFolder = await prisma.folder.findFirst({
+                        where: { title: pathParts[i], parentFolderId: currentParentId, ownerId: parseInt(userId) }
+                    });
 
-                    results.forEach(async (result) => {
-                        await prisma.file.create({
+                    if (!existingFolder) {
+                        existingFolder = await prisma.folder.create({
                             data: {
-                                title: result.fileName,
-                                url: result.url,
-                                size: parseFloat(result.size),
-                                from,
+                                title: pathParts[i],
                                 ownerId: userId,
+                                parentFolderId: currentParentId,
+                                url: bucket.name + "/" + destFolder + "/" + pathParts[i],
+                                size: 0,
+                                privacy,
                                 groupId,
-                                folderId: temp.id
+                                from
                             }
-                        })
-                    })
-                }
+                        });
+                    }
 
-                const folderSuccess = await prisma.folder.findUnique({
+                    folderIds.set(currentPath, existingFolder.id);
+                    currentParentId = existingFolder.id;
+                    foldersToCalSize.push(existingFolder)
+                }
+            }
+
+            const uploadedFiles = [];
+            const MAX_CONCURRENT_UPLOADS = 200;
+            const uploadQueue = [];
+            const totalSize = filesWithPaths.reduce((sum, file) => sum + (parseFloat(file.size) || 0), 0);
+            let uploadedBytes = 0;
+
+            // Throttle: chỉ gửi event mỗi THROTTLE_INTERVAL ms
+            const THROTTLE_INTERVAL = 100; // ms
+            let lastEmitTime = Date.now();
+
+            // **Upload files theo batch để giảm tải**
+            for (const file of filesWithPaths) {
+                const { webkitRelativePath, originalname, buffer, mimetype, size } = file;
+                const folderPath = path.dirname(webkitRelativePath);
+                const folderId = folderIds.get(folderPath) || parentFolderId;
+                const destPath = `${destFolder}/${webkitRelativePath}`;
+
+                const blob = bucket.file(destPath);
+                const stream = blob.createWriteStream({ metadata: { contentType: mimetype } });
+
+                stream.end(buffer);
+
+                uploadQueue.push(new Promise((resolve, reject) => {
+                    stream.on("finish", resolve);
+                    stream.on("error", reject);
+                }).then(async () => {
+                    const uploadedFile = await prisma.file.create({
+                        data: {
+                            title: originalname,
+                            url: format(`${bucket.name}/${blob.name}`),
+                            size: parseFloat(size) || 0,
+                            ownerId: userId,
+                            folderId,
+                            privacy,
+                            groupId,
+                            from
+                        }
+                    });
+                    uploadedFiles.push({ ...uploadedFile, folderId });
+
+                    uploadedBytes += parseFloat(size) || 0;
+                    const progress = Math.floor((uploadedBytes / totalSize) * 100);
+
+                    const now = Date.now();
+                    if (now - lastEmitTime >= THROTTLE_INTERVAL || uploadedBytes === totalSize) {
+                        lastEmitTime = now;
+                        const io = req.app.get('socketio');
+
+                        io.to(`user_${userId}`).emit('upload-progress', {
+                            id: idUpdate,
+                            progress,              // Phần trăm theo tổng số byte
+                            uploadedSize: uploadedBytes, // Tổng số byte đã upload
+                            totalSize,
+                            current: uploadedFiles.length,
+                            done: uploadedBytes === totalSize
+                        });
+                    }
+                }));
+
+                if (uploadQueue.length >= MAX_CONCURRENT_UPLOADS) {
+                    await Promise.all(uploadQueue);
+                    uploadQueue.length = 0;
+                }
+            }
+
+            await Promise.all(uploadQueue);
+
+            let totalStorage;
+
+            if (groupId) {
+                const groupUpdate = await prisma.group.update({
                     where: {
-                        id: parseInt(newFolder.id)
+                        id: parseInt(groupId)
+                    },
+                    data: {
+                        totalStorage: {
+                            increment: parseFloat(totalSize)
+                        }
                     }
                 })
-                // Trả về URL công khai của file đã tải lên
-                res.status(200).send(
-                    folderSuccess);
-            })
+
+                totalStorage = groupUpdate.totalStorage
+            } else {
+                const userUpdate = await prisma.user.update({
+                    where: {
+                        id: parseInt(userId)
+                    },
+                    data: {
+                        totalStorage: {
+                            increment: parseFloat(totalSize)
+                        }
+                    }
+                })
+
+                totalStorage = userUpdate.totalStorage
+            }
+
+            // **Tối ưu cập nhật folder size**
+            await updateFolderSizes(uploadedFiles, foldersToCalSize);
+
+            res.status(200).json({ message: "Upload successfully!", totalStorage: totalStorage });
 
         } catch (e) {
             console.log(e)
@@ -358,10 +595,54 @@ module.exports = {
                     // Tiến hành xóa file từ cơ sở dữ liệu
                     await File.delete(file.id);
 
+                    let parentId = file.folderId
+
+                    while (parentId) {
+                        const folderParent = await prisma.folder.update({
+                            where: {
+                                id: parseInt(parentId)
+                            },
+                            data: {
+                                size: {
+                                    decrement: file.size
+                                }
+                            }
+                        })
+
+                        parentId = folderParent.parentFolderId
+                    }
+
+                    let temp
+
+                    if (file.from == "USER") {
+                        temp = await prisma.user.update({
+                            where: {
+                                id: parseInt(userId)
+                            },
+                            data: {
+                                totalStorage: {
+                                    decrement: file.size
+                                }
+                            }
+                        })
+                    } else if (file.from == "GROUP") {
+                        temp = await prisma.group.update({
+                            where: {
+                                id: parseInt(groupId)
+                            },
+                            data: {
+                                totalStorage: {
+                                    decrement: file.size
+                                }
+                            }
+                        })
+                    }
+
                     // Gửi phản hồi thành công sau khi xóa file thành công
                     return res.status(result.statusCode).send({
                         success: result.success,
                         message: result.message,
+                        totalStorage: temp.totalStorage
                     });
                 } catch (err) {
                     // Nếu có lỗi trong quá trình xóa file từ cơ sở dữ liệu, trả lỗi
@@ -427,31 +708,96 @@ module.exports = {
                 return next(createError(403, "You do not have permission to delete this folder"));
             }
 
-            const pathFolderArray = folder.url.split("/");
-            pathFolderArray.shift();
-            const pathFolder = pathFolderArray.join("/");
+            const prefix = folder.url.split(`${bucket.name}/`)[1];
 
-            deleteFolderFromGCS(pathFolder, async (error, result) => {
-                if (error) {
-                    return next(createError(500, "Error when delelte folder"));
-                }
+            // try {
+            // 1. Xóa tất cả file trên GCS có prefix trùng với folder.url
+            await bucket.deleteFiles({ prefix });
+            // } catch (error) {
+            //     console.error("Error deleting files on GCS for prefix:", prefix, error);
+            //     // Tùy vào logic, bạn có thể quyết định throw error hoặc tiếp tục
+            // }
 
-                try {
-                    // If GCS deletion is successful, proceed with deleting files and folder in the database
-                    const currentFolder = new Folder(folder.id);
-                    await currentFolder.deleteAllFiles(folder.id);
-                    await Folder.delete(folder.id);
+            // Xóa folder hiện tại (cascade sẽ xóa hết các file và folder con)
+            const folderCurrent = await prisma.folder.delete({
+                where: { id: folder.id }
+            });
 
-                    // Only send the response here after everything is done
-                    return res.status(result.statusCode).send({
-                        success: result.success,
-                        message: result.message,
-                    });
-                } catch (dbError) {
-                    console.log(dbError);
-                    return next(createError(500, "Error while deleting folder data from database"));
-                }
-            })
+            let parentId = folderCurrent.parentFolderId
+
+            while (parentId) {
+                const folderParent = await prisma.folder.update({
+                    where: {
+                        id: parseInt(parentId)
+                    },
+                    data: {
+                        size: {
+                            decrement: folderCurrent.size
+                        }
+                    }
+                })
+
+                parentId = folderParent.parentFolderId
+            }
+
+            let totalStorage
+
+            if (folder.from == "GROUP") {
+                const groupUpdate = await prisma.group.update({
+                    where: {
+                        id: parseInt(groupId)
+                    },
+                    data: {
+                        totalStorage: {
+                            decrement: folder.size
+                        }
+                    }
+                })
+
+                totalStorage = groupUpdate.totalStorage
+            } else if (folder.from == "USER") {
+                const userUpdate = await prisma.user.update({
+                    where: {
+                        id: folder.ownerId
+                    },
+                    data: {
+                        totalStorage: {
+                            decrement: folder.size
+                        }
+                    }
+                })
+
+                totalStorage = userUpdate.totalStorage
+            }
+
+
+            res.status(200).json({ message: "delete folder successfully", totalStorage })
+
+            // const pathFolderArray = folder.url.split("/");
+            // pathFolderArray.shift();
+            // const pathFolder = pathFolderArray.join("/");
+
+            // deleteFolderFromGCS(pathFolder, async (error, result) => {
+            //     if (error) {
+            //         return next(createError(500, "Error when delelte folder"));
+            //     }
+
+            //     try {
+            //         // If GCS deletion is successful, proceed with deleting files and folder in the database
+            //         const currentFolder = new Folder(folder.id);
+            //         await currentFolder.deleteAllFiles(folder.id);
+            //         await Folder.delete(folder.id);
+
+            //         // Only send the response here after everything is done
+            //         return res.status(result.statusCode).send({
+            //             success: result.success,
+            //             message: result.message,
+            //         });
+            //     } catch (dbError) {
+            //         console.log(dbError);
+            //         return next(createError(500, "Error while deleting folder data from database"));
+            //     }
+            // })
         } catch (e) {
             console.log(e);
             return next(createError(500))

@@ -13,7 +13,7 @@ class Group {
         type,
         approvalRequired,
         totalStorage = 0,
-        limitStorage = 5000,
+        limitStorage = 3221225472,
         ownerId,
     }) {
         this.id = id ? parseInt(id) : null;

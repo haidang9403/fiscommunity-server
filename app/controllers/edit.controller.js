@@ -8,12 +8,57 @@ const bucket = require("../services/googleCloudStorage");
 
 const fileTypes = [
     "csv", "djvu", "doc", "docm", "docx", "docxf", "dot", "dotm", "dotx",
-    "epub", "fb2", "fodp", "fods", "fodt", "htm", "html", "hwp", "hwpx",
+    "epub", "fb2", "fodp", "fods", "fodt", "hwp", "hwpx",
     "key", "mht", "numbers", "odp", "ods", "odt", "oform", "otp", "ots",
     "ott", "oxps", "pages", "pdf", "pot", "potm", "potx", "pps", "ppsm",
     "ppsx", "ppt", "pptm", "pptx", "rtf", "txt", "xls", "xlsb", "xlsm",
-    "xlsx", "xlt", "xltm", "xltx", "xml", "xps"
+    "xlsx", "xlt", "xltm", "xltx", "xps"
 ];
+
+const getFileType = (filename) => {
+    if (!filename.includes(".")) return null;
+
+    const extension = filename.split(".").pop().toLowerCase();
+
+    const codeExtensions = ["js", "ts", "tsx", "jsx", "java", "py", "cpp", "c", "cs", "html", "css", "php", "json", "xml", "sql", "sh", "md"];
+    const videoExtensions = ["mp4", "avi", "mov", "mkv", "webm", "flv"];
+    const imageExtensions = ["jpg", "jpeg", "png", "gif", "bmp", "svg", "webp"];
+    const audioExtensions = ["mp3", "wav", "ogg", "flac", "aac"];
+
+    if (codeExtensions.includes(extension)) return "code";
+    if (videoExtensions.includes(extension)) return "video";
+    if (imageExtensions.includes(extension)) return "image";
+    if (audioExtensions.includes(extension)) return "audio";
+
+    return null;
+};
+
+const getLanguageFromFileName = (fileName) => {
+    if (!fileName) return null;
+
+    const extensionMap = {
+        "js": "JavaScript",
+        "py": "Python",
+        "cpp": "C++",
+        "c": "C",
+        "java": "Java",
+        "php": "PHP",
+        "go": "Go",
+        "rs": "Rust",
+        "sql": "SQL",
+        "html": "HTML",
+        "css": "CSS",
+        "json": "JSON",
+        "xml": "XML",
+        "sh": "Shell",
+        "swift": "Swift",
+        "kt": "Kotlin",
+        "ts": "TypeScript"
+    };
+
+    const ext = fileName.split(".").pop().toLowerCase();
+    return extensionMap[ext] || "Unknown";
+};
 
 
 const editController = {
@@ -34,7 +79,8 @@ const editController = {
                             assignedUsers: true,
                         }
                     },
-                    userTaskSubmissions: true
+                    userTaskSubmissions: true,
+
                 }
             })
 
@@ -48,10 +94,20 @@ const editController = {
                 await getFileFromGCS(pathFile, async (error, result) => {
                     if (error) return next(createError(500, "Error when get file"));
 
+                    const type = getFileType(file.title)
+                    let language;
+
+                    if (type == "code") {
+                        language = getLanguageFromFileName(file.title)
+                    }
+
                     return res.status(200).json({
                         isNotOpen: true,
                         title: file.title,
                         url: result.url,
+                        file: file,
+                        type,
+                        language
                     })
                 })
             }
@@ -210,10 +266,10 @@ const editController = {
 
             };
 
-            res.json(configRes);
+            return res.json(configRes);
         } catch (error) {
             console.log(error)
-            next(createError(500))
+            return next(createError(500))
         }
 
     },

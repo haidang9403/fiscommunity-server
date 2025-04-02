@@ -47,10 +47,10 @@ chatRoute.post("/conversation/:conversationId/seen", verifyAccessToken, chatAcce
 // chatRoute.delete("/conversation/:conversationId/message/:messageId/delete", verifyAccessToken, chatAccess.message, chatController.deleteMessage)
 
 //--- Unsend message -- socket
-// chatRoute.delete("/conversation/:conversationId/message/:messageId/retrieve", verifyAccessToken, chatAccess.message, chatController.unsendMessage)
+chatRoute.post("/conversation/:conversationId/message/:messageId/retrieve", verifyAccessToken, chatAccess.message, chatController.unsendMessage)
 
 //--- Hard delete message -- socket
-// chatRoute.delete("/conversation/:conversationId/message/:messageId/hard-delete", verifyAccessToken, chatAccess.message, chatController.hardDeleteMessage)
+chatRoute.post("/conversation/:conversationId/message/:messageId/hard-delete", verifyAccessToken, chatAccess.message, chatController.hardDeleteMessage)
 
 // ------------ API Chat Group --------------- //
 

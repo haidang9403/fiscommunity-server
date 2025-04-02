@@ -12,7 +12,7 @@ class Conversation {
         this.userIds = userIds?.map(userId => parseInt(userId)) || [];
         this.lastMessageAt = lastMessageAt;
         this.totalStorage = totalStorage ?? 0;
-        this.limitStorage = limitStorage ?? 5000;
+        this.limitStorage = limitStorage ?? 3221225472;
         this.adminIds = adminIds?.map(adminId => parseInt(adminId)) || [];
     }
 

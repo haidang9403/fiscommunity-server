@@ -90,9 +90,9 @@ const uploadFileToGCS = async (fileBuffer, fileName, destFolder, options = { rep
             // await blob.makePrivate();
             // Lấy thông tin về file
             const [metadata] = await blob.getMetadata();
-            const fileSizeMB = (metadata.size / (1024 * 1024)).toFixed(4);
+            const fileSizeMB = metadata.size;
             const publicUrl = format(`${bucket.name}/${blob.name}`);
-            
+
             callback(null, { fileName, url: publicUrl, size: fileSizeMB });
         });
 
@@ -129,13 +129,13 @@ const uploadFilesToGCS = async (files, destFolder, callback) => {
                             // await blob.makePrivate();
                             // Lấy thông tin về file
                             const [metadata] = await blob.getMetadata();
-                            const fileSizeMB = (metadata.size / (1024 * 1024)).toFixed(4);
+                            const fileSize = metadata.size;
                             const publicUrl = format(`${bucket.name}/${blob.name}`);
 
                             resolve({
                                 fileName,
                                 fileType,
-                                size: fileSizeMB,
+                                size: fileSize,
                                 url: publicUrl,
                             });
                         } catch (e) {
@@ -229,7 +229,7 @@ const uploadFolderToGCS = async (files, destFolder, options = { replace: false }
 
         callback(null, { results, folder, errors });
     } catch (err) {
-        callback(err, null);
+        callback(err, {});
     }
 };
 
